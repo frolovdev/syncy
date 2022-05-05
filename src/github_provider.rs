@@ -36,7 +36,7 @@ pub async fn call(config: EnhancedParsedConfig) {
         path: main_path.clone(),
         children: Vec::new(),
     };
-    let tree = git_tree::Tree::new(&root);
+    let tree = git_tree::Tree::new(root);
 
     let nodes = into_nodes_from_content_items(
         &instance,
@@ -81,8 +81,8 @@ pub async fn into_nodes_from_content_items<'a>(
     owner: &'a str,
     repo: &'a str,
     git_ref: &'a str,
-    content_items: &ContentItems,
-) -> Vec<git_tree::Node> {
+    content_items: &'a ContentItems,
+) -> Vec<git_tree::Node<'a>> {
     let mut node_vec = Vec::new();
 
     for x in content_items.items.iter() {
@@ -115,7 +115,7 @@ async fn unwrap_file<'a>(
     owner: &'a str,
     repo: &'a str,
     git_ref: &'a str,
-) -> Result<git_tree::Node, octocrab::Error> {
+) -> Result<git_tree::Node<'a>, octocrab::Error> {
     let content_items = get_repo(&instance, &owner, &repo, &git_ref, &file_path.to_string())
         .await
         .unwrap();
@@ -137,7 +137,7 @@ async fn unwrap_folder<'a>(
     repo: &'a str,
     git_ref: &'a str,
     content: &'a Content,
-) -> Result<git_tree::Node, octocrab::Error> {
+) -> Result<git_tree::Node<'a>, octocrab::Error> {
     let content_items = get_repo(&instance, &owner, &repo, &git_ref, &content.path)
         .await
         .unwrap();
@@ -241,13 +241,11 @@ async fn update_destinations<'a>(
 }
 
 fn transform_tree<'a>(
-    git_tree: git_tree::Tree<'a>,
+    git_tree: git_tree::Tree,
     origin_files: &Option<GlobExpression>,
     destination_files: &Option<GlobExpression>,
 ) -> git_tree::Tree<'a> {
     todo!()
-    
-    
 }
 
 fn create_file() {
