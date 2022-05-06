@@ -1,6 +1,7 @@
 use async_recursion::async_recursion;
 use octocrab::models::repos::{Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
@@ -82,7 +83,7 @@ pub async fn into_nodes_from_content_items<'a>(
     repo: &'a str,
     git_ref: &'a str,
     content_items: &'a ContentItems,
-) -> Vec<git_tree::Node<'a>> {
+) -> Vec<Rc<git_tree::Node>> {
     let mut node_vec = Vec::new();
 
     for x in content_items.items.iter() {
@@ -95,9 +96,11 @@ pub async fn into_nodes_from_content_items<'a>(
                         .await
                         .unwrap()
                 } else if r#type == folder_type {
-                    unwrap_folder(&instance, &owner, &repo, &git_ref, &x)
+                    let my_node = unwrap_folder(&instance, &owner, &repo, &git_ref, &x)
                         .await
-                        .unwrap()
+                        .unwrap();
+
+                    Rc::new(my_node)
                 } else {
                     panic!("unexpected content type")
                 }
@@ -115,7 +118,7 @@ async fn unwrap_file<'a>(
     owner: &'a str,
     repo: &'a str,
     git_ref: &'a str,
-) -> Result<git_tree::Node<'a>, octocrab::Error> {
+) -> Result<Rc<git_tree::Node>, octocrab::Error> {
     let content_items = get_repo(&instance, &owner, &repo, &git_ref, &file_path.to_string())
         .await
         .unwrap();
@@ -123,11 +126,11 @@ async fn unwrap_file<'a>(
     let content = content_items.items.first().unwrap();
     let decoded_content = content.decoded_content();
 
-    Ok(git_tree::Node::File {
+    Ok(Rc::new(git_tree::Node::File {
         path: file_path.to_string(),
         content: decoded_content,
         git_url: content.git_url.clone(),
-    })
+    }))
 }
 
 #[async_recursion(?Send)]
@@ -137,7 +140,7 @@ async fn unwrap_folder<'a>(
     repo: &'a str,
     git_ref: &'a str,
     content: &'a Content,
-) -> Result<git_tree::Node<'a>, octocrab::Error> {
+) -> Result<git_tree::Node, octocrab::Error> {
     let content_items = get_repo(&instance, &owner, &repo, &git_ref, &content.path)
         .await
         .unwrap();
@@ -222,7 +225,7 @@ async fn update_destinations<'a>(
     destinations: &Vec<DestinationRepository>,
     source_commit_ref: &str,
     destination_branch_name: String,
-    tree: git_tree::Tree<'a>,
+    tree: git_tree::Tree,
     origin_files: Option<GlobExpression>,
     destination_files: Option<GlobExpression>,
 ) {
@@ -244,7 +247,7 @@ fn transform_tree<'a>(
     git_tree: git_tree::Tree,
     origin_files: &Option<GlobExpression>,
     destination_files: &Option<GlobExpression>,
-) -> git_tree::Tree<'a> {
+) -> git_tree::Tree {
     todo!()
 }
 

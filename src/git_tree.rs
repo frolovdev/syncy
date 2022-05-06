@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 #[derive(Debug)]
-pub enum Node<'a> {
+pub enum Node {
     Root {
-      path: Option<String>,
-      children: Vec<&'a Node<'a>>
+        path: Option<String>,
+        children: Vec<Rc<Node>>,
     },
     File {
         path: String,
@@ -11,60 +13,55 @@ pub enum Node<'a> {
     },
     Folder {
         path: String,
-        children: Vec<Node<'a>>,
+        children: Vec<Rc<Node>>,
     },
 }
 
-pub struct Tree<'a> {
-    root: Node<'a>,
+#[derive(Debug)]
+pub struct Tree {
+    root: Rc<Node>,
 }
 
-impl<'a> Tree<'a> {
-    pub fn new(node: Node<'a>) -> Tree<'a> {
-        Tree { root: node }
+impl Tree {
+    pub fn new(node: Node) -> Tree {
+        Tree { root: Rc::new(node) }
     }
 
     pub fn apply_transformation<F>(&self, predicate: F) -> Tree
     where
         F: Fn(&Node) -> bool,
     {
-        let mut nodes: Vec<&Node> = Vec::new();
-        self.df_traverse_helper(self.root, &predicate, &mut nodes);
+        let mut nodes: Vec<Rc<Node>> = Vec::new();
+        self.df_traverse_helper(&self.root, &predicate, &mut nodes);
 
-        let node = Node::Root {
-            path: None,
-            children: nodes
-        };
-        Tree::new(node)
+        let root = Node::Root { path: None, children: nodes };
+        Tree::new(root)
     }
 
-    fn df_traverse_helper<'b, F>(
+    fn df_traverse_helper<'b>(
         &self,
-        node: Node<'b>,
-        predicate: &F,
-        result_nodes: &mut Vec<&'b Node<'b>>,
-    ) -> ()
-    where
-        F: Fn(&Node) -> bool,
-    {
-        match node {
+        node: &Rc<Node>,
+        predicate: &dyn Fn(&Node) -> bool,
+        result_nodes: &mut Vec<Rc<Node>>,
+    ) -> () {
+        match node.as_ref() {
             Node::File { path, .. } => {
                 if predicate(&node) {
-                    result_nodes.push(&node);
+                    result_nodes.push(Rc::clone(&node));
                 }
             }
-            Node::Folder { children, .. }  => {
+            Node::Folder { children, .. } => {
                 if predicate(&node) {
-                    result_nodes.push(&node);
+                    result_nodes.push(Rc::clone(&node));
                 } else {
                     for child in children {
-                        self.df_traverse_helper(child, &predicate, result_nodes);
+                        self.df_traverse_helper(&child, &predicate, result_nodes);
                     }
                 }
             }
             Node::Root { children, .. } => {
                 if predicate(&node) {
-                    result_nodes.push(&node);
+                    result_nodes.push(Rc::clone(&node));
                 } else {
                     for child in children {
                         self.df_traverse_helper(child, &predicate, result_nodes);
@@ -75,22 +72,55 @@ impl<'a> Tree<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-    use super::Cell;
-    fn bad() {
-        // use std::sync::Arc;
-        // let x = Arc::new(Cell::new(42));
-        // let x1 = Arc::clone(&x);
+    use super::{Node, Tree};
+    use std::rc::Rc;
+    #[test]
+    fn it_works() {
+        let child3 = Rc::new(Node::Folder {
+            path: "a/b/c".to_string(),
+            children: Vec::new(),
+        });
+        let child1 = Rc::new(Node::Folder {
+            path: "a/b".to_string(),
+            children: vec![child3],
+        });
 
-        // std::thread::spawn(|| {
-        //   x1._set(43);
-        // });
+        let child2 = Rc::new(Node::Folder {
+            path: "a/c".to_string(),
+            children: Vec::new(),
+        });
+        let root = Node::Root {
+            path: Some("a".to_string()),
+            children: vec![child1, child2],
+        };
+        let tree = Tree::new(root);
 
-        // let x2 = Arc::clone(&x);
-        // std::thread::spawn(|| {
-        //   x2._set(44)
-        // });
+        let new_tree = tree.apply_transformation(|n| {
+            match n {
+                Node::Folder { path, .. } => path == "a/b",
+                _ => false,
+            }
+        });
+
+
+        match tree.root.as_ref() {
+            Node::Root { path, children } => {
+                println!("mems {}", Rc::strong_count(children.last().unwrap()));
+            },
+            Node::File { path, content, git_url } => {},
+            Node::Folder { path, children } => {},
+        }
+        
+        match new_tree.root.as_ref() {
+            Node::Root { path, children } => {
+                println!("kekos {}", Rc::strong_count(children.first().unwrap()));
+            },
+            Node::File { path, content, git_url } => {},
+            Node::Folder { path, children } => {},
+        }
+
+        println!("{:?}", new_tree);
     }
 }
