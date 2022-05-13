@@ -1,25 +1,25 @@
-use std::rc::Rc;
+use std::{cell::RefCell, pin::Pin, rc::Rc};
 
 #[derive(Debug)]
 pub enum Node {
     Root {
-        path: Option<String>,
+        path: Option<RefCell<String>>,
         children: Vec<Rc<Node>>,
     },
     File {
-        path: String,
+        path: RefCell<String>,
         content: Option<String>,
         git_url: String,
     },
     Folder {
-        path: String,
+        path: RefCell<String>,
         children: Vec<Rc<Node>>,
     },
 }
 
 #[derive(Debug)]
 pub struct Tree {
-    root: Rc<Node>,
+    pub root: Rc<Node>,
 }
 
 impl Tree {
@@ -34,7 +34,7 @@ impl Tree {
         F: Fn(&Node) -> bool,
     {
         let mut nodes: Vec<Rc<Node>> = Vec::new();
-        self.df_traverse_helper(&self.root, &predicate, &mut nodes);
+        self.apply_transformation_traverse_helper(&self.root, &predicate, &mut nodes);
 
         let root = Node::Root {
             path: None,
@@ -43,7 +43,7 @@ impl Tree {
         Tree::new(root)
     }
 
-    fn df_traverse_helper(
+    fn apply_transformation_traverse_helper(
         &self,
         node: &Rc<Node>,
         predicate: &dyn Fn(&Node) -> bool,
@@ -60,7 +60,7 @@ impl Tree {
                     result_nodes.push(Rc::clone(&node));
                 } else {
                     for child in children {
-                        self.df_traverse_helper(&child, &predicate, result_nodes);
+                        self.apply_transformation_traverse_helper(&child, &predicate, result_nodes);
                     }
                 }
             }
@@ -69,8 +69,48 @@ impl Tree {
                     result_nodes.push(Rc::clone(&node));
                 } else {
                     for child in children {
-                        self.df_traverse_helper(child, &predicate, result_nodes);
+                        self.apply_transformation_traverse_helper(child, &predicate, result_nodes);
                     }
+                }
+            }
+        }
+    }
+
+    pub fn traverse(
+        &self,
+        predicate: Box<
+            dyn Fn(
+                &Node,
+            )
+                -> Pin<Box<(dyn std::future::Future<Output = ()> + Send + Sync + 'static)>>,
+        >,
+    ) {
+        self.traverse_helper(&self.root, &predicate);
+    }
+
+    fn traverse_helper(
+        &self,
+        node: &Rc<Node>,
+        predicate: &dyn Fn(
+            &Node,
+        ) -> Pin<
+            Box<(dyn std::future::Future<Output = ()> + Send + Sync + 'static)>,
+        >,
+    ) -> () {
+        match node.as_ref() {
+            Node::File { .. } => {
+                predicate(&node);
+                // predicate(&node);
+            }
+            Node::Folder { children, .. } => {
+                predicate(&node);
+                for child in children {
+                    self.traverse_helper(&child, &predicate);
+                }
+            }
+            Node::Root { children, .. } => {
+                for child in children {
+                    self.traverse_helper(child, &predicate);
                 }
             }
         }
@@ -80,30 +120,30 @@ impl Tree {
 #[cfg(test)]
 mod test {
     use super::{Node, Tree};
-    use std::rc::Rc;
+    use std::{cell::RefCell, rc::Rc};
     #[test]
     fn it_works() {
         let child3 = Rc::new(Node::Folder {
-            path: "a/b/c".to_string(),
+            path: RefCell::new("a/b/c".to_string()),
             children: Vec::new(),
         });
         let child1 = Rc::new(Node::Folder {
-            path: "a/b".to_string(),
+            path: RefCell::new("a/b".to_string()),
             children: vec![child3],
         });
 
         let child2 = Rc::new(Node::Folder {
-            path: "a/c".to_string(),
+            path: RefCell::new("a/c".to_string()),
             children: Vec::new(),
         });
         let root = Node::Root {
-            path: Some("a".to_string()),
+            path: Some(RefCell::new("a".to_string())),
             children: vec![child1, child2],
         };
         let tree = Tree::new(root);
 
         let new_tree = tree.apply_transformation(|n| match n {
-            Node::Folder { path, .. } => path == "a/b",
+            Node::Folder { path, .. } => *path.borrow() == "a/b",
             _ => false,
         });
 
