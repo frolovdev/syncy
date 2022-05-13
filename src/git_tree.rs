@@ -24,7 +24,9 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(node: Node) -> Tree {
-        Tree { root: Rc::new(node) }
+        Tree {
+            root: Rc::new(node),
+        }
     }
 
     pub fn apply_transformation<F>(&self, predicate: F) -> Tree
@@ -34,18 +36,21 @@ impl Tree {
         let mut nodes: Vec<Rc<Node>> = Vec::new();
         self.df_traverse_helper(&self.root, &predicate, &mut nodes);
 
-        let root = Node::Root { path: None, children: nodes };
+        let root = Node::Root {
+            path: None,
+            children: nodes,
+        };
         Tree::new(root)
     }
 
-    fn df_traverse_helper<'b>(
+    fn df_traverse_helper(
         &self,
         node: &Rc<Node>,
         predicate: &dyn Fn(&Node) -> bool,
         result_nodes: &mut Vec<Rc<Node>>,
     ) -> () {
         match node.as_ref() {
-            Node::File { path, .. } => {
+            Node::File { .. } => {
                 if predicate(&node) {
                     result_nodes.push(Rc::clone(&node));
                 }
@@ -97,28 +102,33 @@ mod test {
         };
         let tree = Tree::new(root);
 
-        let new_tree = tree.apply_transformation(|n| {
-            match n {
-                Node::Folder { path, .. } => path == "a/b",
-                _ => false,
-            }
+        let new_tree = tree.apply_transformation(|n| match n {
+            Node::Folder { path, .. } => path == "a/b",
+            _ => false,
         });
-
 
         match tree.root.as_ref() {
             Node::Root { path, children } => {
                 println!("mems {}", Rc::strong_count(children.last().unwrap()));
-            },
-            Node::File { path, content, git_url } => {},
-            Node::Folder { path, children } => {},
+            }
+            Node::File {
+                path,
+                content,
+                git_url,
+            } => {}
+            Node::Folder { path, children } => {}
         }
-        
+
         match new_tree.root.as_ref() {
             Node::Root { path, children } => {
                 println!("kekos {}", Rc::strong_count(children.first().unwrap()));
-            },
-            Node::File { path, content, git_url } => {},
-            Node::Folder { path, children } => {},
+            }
+            Node::File {
+                path,
+                content,
+                git_url,
+            } => {}
+            Node::Folder { path, children } => {}
         }
 
         println!("{:?}", new_tree);

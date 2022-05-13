@@ -3,9 +3,10 @@ use octocrab::models::repos::{Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::vec;
 
 use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
-use crate::git_tree;
+use crate::{git_tree, main};
 
 pub async fn call(config: EnhancedParsedConfig) {
     let octacrab_builder = octocrab::Octocrab::builder().personal_token(config.token);
@@ -26,18 +27,7 @@ pub async fn call(config: EnhancedParsedConfig) {
     .await
     .unwrap();
 
-    // if we get a path to file array will be length of one and will have type file
-    // we don't need to create a tree right here
-
-    // else
-    //  if we get an array of one but type is dir - we create a GitTree where this dir is a root
-    // if we get an array of two - we create a GitTree where the root is passed path
-
-    let root = git_tree::Node::Folder {
-        path: main_path.clone(),
-        children: Vec::new(),
-    };
-    let tree = git_tree::Tree::new(root);
+    println!("{:#?}", source_repo_content);
 
     let nodes = into_nodes_from_content_items(
         &instance,
@@ -47,6 +37,12 @@ pub async fn call(config: EnhancedParsedConfig) {
         &source_repo_content,
     )
     .await;
+
+    let root = git_tree::Node::Root {
+        path: Some(main_path.clone()),
+        children: nodes,
+    };
+    let tree = git_tree::Tree::new(root);
 
     let source_branch = get_branch(
         &instance,
@@ -65,16 +61,16 @@ pub async fn call(config: EnhancedParsedConfig) {
         &last_ref_commit_from_source,
     );
 
-    update_destinations(
-        &instance,
-        &config.destinations,
-        &last_ref_commit_from_source,
-        destination_branch_name,
-        tree,
-        config.origin_files,
-        config.destination_files,
-    )
-    .await
+    // update_destinations(
+    //     &instance,
+    //     &config.destinations,
+    //     &last_ref_commit_from_source,
+    //     destination_branch_name,
+    //     tree,
+    //     config.origin_files,
+    //     config.destination_files,
+    // )
+    // .await
 }
 
 pub async fn into_nodes_from_content_items<'a>(
@@ -220,7 +216,7 @@ fn get_sha(object: &models::repos::Object) -> Option<String> {
     }
 }
 
-async fn update_destinations<'a>(
+async fn update_destinations(
     octocrab: &Arc<Octocrab>,
     destinations: &Vec<DestinationRepository>,
     source_commit_ref: &str,
@@ -243,12 +239,32 @@ async fn update_destinations<'a>(
     }
 }
 
-fn transform_tree<'a>(
+fn transform_tree(
     git_tree: git_tree::Tree,
     origin_files: &Option<GlobExpression>,
     destination_files: &Option<GlobExpression>,
 ) -> git_tree::Tree {
-    todo!()
+    let unwrapped_origin = origin_files.as_ref().unwrap();
+    git_tree.apply_transformation(|node| match node {
+        git_tree::Node::Root { path, .. } => {
+            let unwrapped_path = path.as_ref().unwrap();
+            match unwrapped_origin {
+                GlobExpression::Single(pattern) => pattern.matches(&unwrapped_path),
+                GlobExpression::SingleWithExclude(include_pattern, exclude_pattern) => {
+                    include_pattern.matches(&unwrapped_path)
+                        && !exclude_pattern.matches(&unwrapped_path)
+                }
+            }
+        }
+        git_tree::Node::File { path, .. } | git_tree::Node::Folder { path, .. } => {
+            match unwrapped_origin {
+                GlobExpression::Single(pattern) => pattern.matches(path),
+                GlobExpression::SingleWithExclude(include_pattern, exclude_pattern) => {
+                    include_pattern.matches(path) && !exclude_pattern.matches(path)
+                }
+            }
+        }
+    })
 }
 
 fn create_file() {

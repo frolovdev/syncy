@@ -102,7 +102,7 @@ fn parse_glob(val: &str) -> GlobExpression {
 
     let len = &val.len();
 
-    if (matched_any && single_with_exclude) {
+    if matched_any && single_with_exclude {
         let comma_position = &val.find(",").unwrap();
 
         let first_glob_end = comma_position - 1;
