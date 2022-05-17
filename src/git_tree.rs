@@ -1,41 +1,41 @@
-use std::sync::{Arc, RwLock};
+use std::{cell::RefCell, rc::Rc};
 
 use futures::future::{join_all, BoxFuture};
 
 #[derive(Debug)]
 pub enum Node {
     Root {
-        path: Option<RwLock<String>>,
-        children: Vec<Arc<Node>>,
+        path: Option<RefCell<String>>,
+        children: Vec<Rc<Node>>,
     },
     File {
-        path: RwLock<String>,
+        path: RefCell<String>,
         content: Option<String>,
         git_url: String,
     },
     Folder {
-        path: RwLock<String>,
-        children: Vec<Arc<Node>>,
+        path: RefCell<String>,
+        children: Vec<Rc<Node>>,
     },
 }
 
 #[derive(Debug)]
 pub struct Tree {
-    pub root: Arc<Node>,
+    pub root: Rc<Node>,
 }
 
 impl Tree {
     pub fn new(node: Node) -> Tree {
         Tree {
-            root: Arc::new(node),
+            root: Rc::new(node),
         }
     }
 
     pub fn apply_transformation<F>(&self, predicate: F) -> Tree
     where
-        F: Fn(&Arc<Node>) -> bool,
+        F: Fn(&Rc<Node>) -> bool,
     {
-        let mut nodes: Vec<Arc<Node>> = Vec::new();
+        let mut nodes: Vec<Rc<Node>> = Vec::new();
         self.apply_transformation_traverse_helper(&self.root, &predicate, &mut nodes);
 
         let root = Node::Root {
@@ -47,9 +47,9 @@ impl Tree {
 
     fn apply_transformation_traverse_helper(
         &self,
-        node: &Arc<Node>,
-        predicate: &dyn Fn(&Arc<Node>) -> bool,
-        result_nodes: &mut Vec<Arc<Node>>,
+        node: &Rc<Node>,
+        predicate: &dyn Fn(&Rc<Node>) -> bool,
+        result_nodes: &mut Vec<Rc<Node>>,
     ) -> () {
         match node.as_ref() {
             Node::File { .. } => {
@@ -88,7 +88,7 @@ impl Tree {
 
     fn traverse_helper(
         &self,
-        node: Arc<Node>,
+        node: Rc<Node>,
         predicate: &Box<dyn Fn(&Node) -> BoxFuture<'static, ()>>,
         joins: &mut Vec<BoxFuture<'static, ()>>,
     ) -> () {
@@ -102,14 +102,13 @@ impl Tree {
                 joins.push(future);
 
                 for child in children {
-                    let forked = child.clone();
-
+                    let forked = Rc::clone(&child);
                     self.traverse_helper(forked, &predicate, joins);
                 }
             }
             Node::Root { children, .. } => {
                 for child in children {
-                    let forked = child.clone();
+                    let forked = Rc::clone(&child);
                     self.traverse_helper(forked, &predicate, joins);
                 }
             }
