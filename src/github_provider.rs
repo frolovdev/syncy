@@ -2,9 +2,7 @@ use async_recursion::async_recursion;
 use octocrab::models::repos::{Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
 use crate::git_tree;
@@ -40,7 +38,7 @@ pub async fn call(config: EnhancedParsedConfig) {
     .await;
 
     let root = git_tree::Node::Root {
-        path: Some(RefCell::new(main_path.clone())),
+        path: Some(RwLock::new(main_path.clone())),
         children: nodes,
     };
     let tree = git_tree::Tree::new(root);
@@ -81,7 +79,7 @@ pub async fn into_nodes_from_content_items<'a>(
     repo: &'a str,
     git_ref: &'a str,
     content_items: &'a ContentItems,
-) -> Vec<Rc<git_tree::Node>> {
+) -> Vec<Arc<git_tree::Node>> {
     let mut node_vec = Vec::new();
 
     for x in content_items.items.iter() {
@@ -98,7 +96,7 @@ pub async fn into_nodes_from_content_items<'a>(
                         .await
                         .unwrap();
 
-                    Rc::new(my_node)
+                    Arc::new(my_node)
                 } else {
                     panic!("unexpected content type")
                 }
@@ -116,7 +114,7 @@ async fn unwrap_file<'a>(
     owner: &'a str,
     repo: &'a str,
     git_ref: &'a str,
-) -> Result<Rc<git_tree::Node>, octocrab::Error> {
+) -> Result<Arc<git_tree::Node>, octocrab::Error> {
     let content_items = get_repo(&instance, &owner, &repo, &git_ref, &file_path.to_string())
         .await
         .unwrap();
@@ -124,14 +122,14 @@ async fn unwrap_file<'a>(
     let content = content_items.items.first().unwrap();
     let decoded_content = content.decoded_content();
 
-    Ok(Rc::new(git_tree::Node::File {
-        path: RefCell::new(file_path.to_string()),
+    Ok(Arc::new(git_tree::Node::File {
+        path: RwLock::new(file_path.to_string()),
         content: decoded_content,
         git_url: content.git_url.clone(),
     }))
 }
 
-#[async_recursion(?Send)]
+#[async_recursion()]
 async fn unwrap_folder<'a>(
     instance: &'a Arc<Octocrab>,
     owner: &'a str,
@@ -147,7 +145,7 @@ async fn unwrap_folder<'a>(
         into_nodes_from_content_items(instance, &owner, &repo, &git_ref, &content_items).await;
 
     let cur_node = git_tree::Node::Folder {
-        path: RefCell::new(content.path.clone()),
+        path: RwLock::new(content.path.clone()),
         children: nodes,
     };
 
@@ -256,7 +254,9 @@ async fn update_destinations(
         let future = transformed_tree.traverse(Box::new(move |node| {
             if let git_tree::Node::File { path, content, .. } = node {
                 if let Some(content_value) = content.as_ref() {
-                    let local_path = String::from(&*path.borrow());
+                    println!("visit new file");
+
+                    let local_path = String::from(&*path.read().unwrap());
 
                     let local_content_value = String::from(content_value);
 
@@ -277,7 +277,7 @@ async fn update_destinations(
                         )
                         .await;
                     });
-                    return Box::pin(async move {
+                    return Box::pin(async {
                         handle.await.unwrap();
                     });
                 } else {
@@ -305,15 +305,15 @@ fn transform_tree(
         }
     };
 
-    git_tree.apply_transformation(|node| match node {
+    git_tree.apply_transformation(|node| match node.as_ref() {
         git_tree::Node::Root { .. } => true,
         git_tree::Node::File { path, .. } | git_tree::Node::Folder { path, .. } => {
-            let mut unwrapped_path = path.borrow_mut();
+            let mut unwrapped_path = path.write().unwrap();
             match unwrapped_origin {
                 GlobExpression::Single(pattern) => {
                     if pattern.matches(&unwrapped_path) {
                         let new_val = unwrapped_path
-                            .trim_start_matches(&*root_path.as_ref().unwrap().borrow());
+                            .trim_start_matches(&*root_path.as_ref().unwrap().read().unwrap());
 
                         *unwrapped_path = new_val.to_string();
                         return true;
@@ -326,7 +326,7 @@ fn transform_tree(
                         && !exclude_pattern.matches(&unwrapped_path)
                     {
                         let new_val = unwrapped_path
-                            .trim_start_matches(&*root_path.as_ref().unwrap().borrow());
+                            .trim_start_matches(&*root_path.as_ref().unwrap().read().unwrap());
 
                         *unwrapped_path = new_val.to_string();
                         return true;
