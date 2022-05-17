@@ -117,7 +117,7 @@ fn parse_glob(val: &str) -> GlobExpression {
         return GlobExpression::SingleWithExclude(glob_pattern, second_glob_pattern);
     }
 
-    if (matched_any && single) {
+    if matched_any && single {
         let end = len - 2;
         let pattern = &val[6..end];
 

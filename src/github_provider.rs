@@ -1,5 +1,5 @@
 use async_recursion::async_recursion;
-use octocrab::models::repos::{Content, ContentItems, Ref};
+use octocrab::models::repos::{Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -62,9 +62,11 @@ pub async fn call(config: EnhancedParsedConfig) {
         &last_ref_commit_from_source,
     );
 
+    let val = instance.clone();
+    let destinations = Arc::new(config.destinations);
     update_destinations(
-        &instance,
-        &config.destinations,
+        val,
+        destinations,
         destination_branch_name,
         tree,
         config.origin_files,
@@ -217,8 +219,8 @@ fn get_sha(object: &models::repos::Object) -> Option<String> {
 }
 
 async fn update_destinations(
-    octocrab: &Arc<Octocrab>,
-    destinations: &Vec<DestinationRepository>,
+    octocrab: Arc<Octocrab>,
+    destinations: Arc<Vec<DestinationRepository>>,
     destination_branch_name: String,
     tree: git_tree::Tree,
     origin_files: Option<GlobExpression>,
@@ -227,9 +229,14 @@ async fn update_destinations(
     let transformed_tree = transform_tree(tree, &origin_files);
 
     for destination in destinations.iter() {
+        let local_owner = String::from(&destination.owner);
+        let local_name = String::from(&destination.name);
+        let local_destination_branch_name = String::from(&destination_branch_name);
+
+        let instance = octocrab.clone();
         let main_ref = "main";
         let destination_main =
-            get_branch(&octocrab, &destination.owner, &destination.name, &main_ref)
+            get_branch(&instance, &destination.owner, &destination.name, &main_ref)
                 .await
                 .unwrap();
 
@@ -239,25 +246,27 @@ async fn update_destinations(
             &octocrab,
             &destination.owner,
             &destination.name,
-            &destination_branch_name,
+            &local_destination_branch_name,
             &commit_ref,
         )
         .await
         .unwrap();
 
-        transformed_tree.traverse(Box::new(|node| {
-            Box::pin(async {
-                if let git_tree::Node::File { path, content, .. } = node {
-                    if let Some(content_value) = content.as_ref() {
-                        println!("we are don {}, content: {}", &*path.borrow(), content_value);
-                        let local_path = String::from(&*path.borrow());
-                        let instance = octocrab.clone();
+        let instance = instance.clone();
+        let future = transformed_tree.traverse(Box::new(move |node| {
+            if let git_tree::Node::File { path, content, .. } = node {
+                if let Some(content_value) = content.as_ref() {
+                    let local_path = String::from(&*path.borrow());
 
-                        let local_content_value = String::from(content_value);
-                        let local_owner = String::from(&destination.owner);
-                        let local_name = String::from(&destination.name);
-                        let local_destination_branch_name = String::from(&destination_branch_name);
+                    let local_content_value = String::from(content_value);
 
+                    let local_owner = String::from(&local_owner);
+                    let local_name = String::from(&local_name);
+                    let local_destination_branch_name =
+                        String::from(&local_destination_branch_name);
+                    let instance = instance.clone();
+
+                    let handle = tokio::spawn(async move {
                         create_file(
                             &instance,
                             &local_owner,
@@ -267,10 +276,19 @@ async fn update_destinations(
                             &local_destination_branch_name,
                         )
                         .await;
-                    }
-                };
-            })
+                    });
+                    return Box::pin(async move {
+                        handle.await.unwrap();
+                    });
+                } else {
+                    return Box::pin(async {});
+                }
+            } else {
+                return Box::pin(async {});
+            };
         }));
+
+        future.await;
     }
 }
 
@@ -361,8 +379,6 @@ async fn create_file(
         repo = repo,
         file_name = file_name
     );
-
-    println!("route: {}", &route);
 
     octocrab
         .put::<CreateFileResponse, _, _>(route, Some(&body))

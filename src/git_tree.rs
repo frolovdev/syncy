@@ -1,5 +1,7 @@
 use std::{cell::RefCell, pin::Pin, rc::Rc};
 
+use async_recursion::async_recursion;
+
 #[derive(Debug)]
 pub enum Node {
     Root {
@@ -76,41 +78,32 @@ impl Tree {
         }
     }
 
-    pub fn traverse(
+    pub async fn traverse(
         &self,
-        predicate: Box<
-            dyn Fn(
-                &Node,
-            )
-                -> Pin<Box<(dyn std::future::Future<Output = ()> + Send + Sync + 'static)>>,
-        >,
+        predicate: Box<dyn Fn(&Node) -> Pin<Box<(dyn std::future::Future<Output = ()>)>>>,
     ) {
-        self.traverse_helper(&self.root, &predicate);
+        self.traverse_helper(&self.root, &predicate).await;
     }
 
-    fn traverse_helper(
+    #[async_recursion(?Send)]
+    async fn traverse_helper(
         &self,
         node: &Rc<Node>,
-        predicate: &dyn Fn(
-            &Node,
-        ) -> Pin<
-            Box<(dyn std::future::Future<Output = ()> + Send + Sync + 'static)>,
-        >,
+        predicate: &Box<dyn Fn(&Node) -> Pin<Box<(dyn std::future::Future<Output = ()>)>>>,
     ) -> () {
         match node.as_ref() {
             Node::File { .. } => {
-                predicate(&node);
-                // predicate(&node);
+                predicate(&node).await;
             }
             Node::Folder { children, .. } => {
-                predicate(&node);
+                predicate(&node).await;
                 for child in children {
-                    self.traverse_helper(&child, &predicate);
+                    self.traverse_helper(&child, &predicate).await;
                 }
             }
             Node::Root { children, .. } => {
                 for child in children {
-                    self.traverse_helper(child, &predicate);
+                    self.traverse_helper(child, &predicate).await;
                 }
             }
         }
