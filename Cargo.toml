@@ -19,3 +19,5 @@ futures = "0.3"
 async-recursion = "1.0.0"
 regex = "1.5"
 glob = "0.3.0"
+[dev-dependencies]
+indoc = "1.0"
