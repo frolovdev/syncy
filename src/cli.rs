@@ -301,10 +301,6 @@ mod tests {
             
             "#};
 
-            // let parsed_config_error = parse_config(&doc).unwrap_err().to_string();
-
-            // assert_eq!(parsed_config_error.contains("missing field") && parsed_config_error.contains("transformations"), true);
-
             let parsed_config = parse_config(&doc).unwrap();
 
             let expected_source = SourceRepository {
