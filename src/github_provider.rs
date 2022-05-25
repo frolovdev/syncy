@@ -202,7 +202,7 @@ async fn update_destinations(
     destination_branch_name: String,
     tree: git_tree::Tree,
     origin_files: Option<GlobExpression>,
-    destination_files: Option<GlobExpression>,
+    _destination_files: Option<GlobExpression>,
     root_path: &str,
 ) {
     let transformed_tree = transform_tree(tree, &origin_files, root_path);

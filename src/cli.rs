@@ -48,6 +48,7 @@ pub struct ParsedConfig {
     pub token: String,
     pub destination_files: Option<String>,
     pub origin_files: Option<String>,
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_transformations")]
     pub transformations: Option<Vec<Transformation>>,
 }
@@ -58,9 +59,9 @@ fn deserialize_transformations<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    struct JsonStringVisitor;
+    struct TransformationsVisitor;
 
-    impl<'de> Visitor<'de> for JsonStringVisitor {
+    impl<'de> Visitor<'de> for TransformationsVisitor {
         type Value = Option<Vec<Transformation>>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -94,7 +95,7 @@ where
                             let args = MoveArgs { before, after };
                             Some(Transformation::Move { args })
                         } else {
-                            panic!("fn should be one of reserved functions")
+                            panic!("transformations.fn should be one of reserved functions")
                         }
                     })
                     .expect("transformation should contain fn property");
@@ -108,7 +109,7 @@ where
         }
     }
 
-    deserializer.deserialize_any(JsonStringVisitor)
+    deserializer.deserialize_any(TransformationsVisitor)
 }
 
 #[derive(Clone, Debug)]
@@ -212,13 +213,14 @@ fn parse_glob(val: &str) -> GlobExpression {
 mod tests {
 
     mod deserialize_transformations {
+
         use crate::cli::{MoveArgs, Transformation};
 
         use super::super::{parse_config, DestinationRepository, ParsedConfig, SourceRepository};
         use indoc::indoc;
 
         #[test]
-        fn success() {
+        fn test_success() {
             let doc = indoc! {r#"
             version: 0.0.1
 
@@ -275,6 +277,85 @@ mod tests {
             };
 
             assert_eq!(parsed_config, expected_config);
+        }
+
+        #[test]
+        fn test_when_no_transformation_given() {
+            let doc = indoc! {r#"
+            version: 0.0.1
+
+            source:
+              owner: my_name
+              name: test1
+              git_ref: main
+            
+            destinations:
+              - owner: my_name
+                name: test2
+            
+            token: random_token
+            
+            origin_files: glob("**")
+            
+            destination_files: glob("my_folder/**")
+            
+            "#};
+
+            // let parsed_config_error = parse_config(&doc).unwrap_err().to_string();
+
+            // assert_eq!(parsed_config_error.contains("missing field") && parsed_config_error.contains("transformations"), true);
+
+            let parsed_config = parse_config(&doc).unwrap();
+
+            let expected_source = SourceRepository {
+                owner: "my_name".to_string(),
+                name: "test1".to_string(),
+                git_ref: "main".to_string(),
+            };
+
+            let expected_destination = DestinationRepository {
+                owner: "my_name".to_string(),
+                name: "test2".to_string(),
+            };
+
+            let expected_config = ParsedConfig {
+                version: "0.0.1".to_string(),
+                source: expected_source,
+                destinations: vec![expected_destination],
+                token: "random_token".to_string(),
+                origin_files: Some("glob(\"**\")".to_string()),
+                destination_files: Some("glob(\"my_folder/**\")".to_string()),
+                transformations: None,
+            };
+
+            assert_eq!(parsed_config, expected_config);
+        }
+
+        #[test]
+        #[should_panic(expected = "transformations.fn should be one of reserved functions")]
+        fn test_transformations_wrong_fn() {
+            let doc = indoc! {r#"
+            version: 0.0.1
+
+            source:
+              owner: my_name
+              name: test1
+              git_ref: main
+            
+            destinations:
+              - owner: my_name
+                name: test2
+            
+            token: random_token
+            
+            origin_files: glob("**")
+            
+            destination_files: glob("my_folder/**")
+            transformations:
+                - fn: random
+            "#};
+
+            parse_config(&doc);
         }
     }
 }
