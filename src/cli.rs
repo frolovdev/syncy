@@ -80,7 +80,7 @@ where
                             let before = value
                                 .get("args")
                                 .and_then(|v| v.get("before"))
-                                .expect("args should contain before")
+                                .expect("builtin.move.args should contain before")
                                 .as_str()
                                 .unwrap()
                                 .to_owned();
@@ -88,7 +88,7 @@ where
                             let after = value
                                 .get("args")
                                 .and_then(|v| v.get("after"))
-                                .expect("args should contain after")
+                                .expect("builtin.move.args should contain after")
                                 .as_str()
                                 .unwrap()
                                 .to_owned();
@@ -349,6 +349,64 @@ mod tests {
             destination_files: glob("my_folder/**")
             transformations:
                 - fn: random
+            "#};
+
+            parse_config(&doc);
+        }
+
+        #[test]
+        #[should_panic(expected = "builtin.move.args should contain after")]
+        fn test_transformations_move_after() {
+            let doc = indoc! {r#"
+            version: 0.0.1
+
+            source:
+              owner: my_name
+              name: test1
+              git_ref: main
+            
+            destinations:
+              - owner: my_name
+                name: test2
+            
+            token: random_token
+            
+            origin_files: glob("**")
+            
+            destination_files: glob("my_folder/**")
+            transformations:
+              -  fn: builtin.move
+                 args:
+                   before: random  
+            "#};
+
+            parse_config(&doc);
+        }
+
+        #[test]
+        #[should_panic(expected = "builtin.move.args should contain before")]
+        fn test_transformations_move_before() {
+            let doc = indoc! {r#"
+            version: 0.0.1
+
+            source:
+              owner: my_name
+              name: test1
+              git_ref: main
+            
+            destinations:
+              - owner: my_name
+                name: test2
+            
+            token: random_token
+            
+            origin_files: glob("**")
+            
+            destination_files: glob("my_folder/**")
+            transformations:
+                - fn: builtin.move
+                  args:
+                    after: random  
             "#};
 
             parse_config(&doc);
