@@ -1,4 +1,5 @@
 mod cli;
+mod fixtures;
 mod git_tree;
 mod github_provider;
 
