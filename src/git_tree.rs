@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::cli::GlobExpression;
+use crate::{cli::GlobExpression, event::Event};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Node {
     pub path: String,
     pub content: Option<String>,
@@ -13,6 +13,8 @@ pub type Tree = HashMap<String, Node>;
 
 pub trait GitTree {
     fn transform_tree(self, origin_files_glob: &Option<GlobExpression>, root_path: &str) -> Tree;
+
+    fn generate_events(&self, destination_tree: &Tree) -> Vec<Event>;
 }
 
 impl GitTree for HashMap<String, Node> {
@@ -43,12 +45,39 @@ impl GitTree for HashMap<String, Node> {
 
         new_tree
     }
+
+    fn generate_events(&self, destination_tree: &Tree) -> Vec<Event> {
+        let mut events = Vec::new();
+        for (source_key, source_node) in self.iter() {
+            let destination_node = destination_tree.get(source_key);
+            match destination_node {
+                Some(destination_node) => events.push(Event::Update {
+                    path: source_key.to_string(),
+                    content: destination_node.content.clone(),
+                }),
+                None => events.push(Event::Create {
+                    path: source_key.to_string(),
+                    content: source_node.content.clone(),
+                }),
+            }
+        }
+
+        for (dest_key, _) in destination_tree.iter() {
+            if !self.contains_key(dest_key) {
+                events.push(Event::Delete {
+                    path: dest_key.to_string(),
+                })
+            }
+        }
+
+        events
+    }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use crate::fixtures::globs::{create_glob_single};
+    use crate::fixtures::globs::create_glob_single;
 
     use super::{GitTree, Node, Tree};
 
@@ -59,7 +88,7 @@ mod tests {
         tree.insert(
             "folder/file1".to_string(),
             Node {
-                path: "".to_string(),
+                path: "folder/file1".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
             },
@@ -67,7 +96,7 @@ mod tests {
         tree.insert(
             "folder/folder2/file2".to_string(),
             Node {
-                path: "".to_string(),
+                path: "folder/folder2/file2".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
             },
@@ -75,14 +104,26 @@ mod tests {
         tree.insert(
             "folder/file3".to_string(),
             Node {
-                path: "".to_string(),
+                path: "folder/file3".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
             },
         );
 
-        let glob = create_glob_single("**");
+        let glob = create_glob_single("folder/folder2/**");
 
-        let new_tree = tree.transform_tree(&glob, "");
+        let new_tree = tree.transform_tree(&Some(glob), "");
+
+        let mut expected_tree = Tree::new();
+        expected_tree.insert(
+            "folder/folder2/file2".to_string(),
+            Node {
+                path: "folder/folder2/file2".to_string(),
+                content: Some("".to_string()),
+                git_url: "".to_string(),
+            },
+        );
+
+        assert_eq!(new_tree, expected_tree);
     }
 }

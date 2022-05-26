@@ -9,8 +9,8 @@ pub fn create_glob_single(val: &str) -> GlobExpression {
 }
 
 pub fn create_glob_single_with_exclude(val: &str, exclude: &str) -> GlobExpression {
-  let glob_pattern = glob::Pattern::new(val).unwrap();
-  let glob_pattern_exclude = glob::Pattern::new(exclude).unwrap();
+    let glob_pattern = glob::Pattern::new(val).unwrap();
+    let glob_pattern_exclude = glob::Pattern::new(exclude).unwrap();
 
-  GlobExpression::SingleWithExclude(glob_pattern, glob_pattern_exclude)
+    GlobExpression::SingleWithExclude(glob_pattern, glob_pattern_exclude)
 }

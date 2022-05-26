@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
+use crate::event::Event;
 use crate::git_tree;
 
 pub async fn call(config: EnhancedParsedConfig) {
@@ -206,7 +207,7 @@ async fn update_destinations(
     _destination_files: Option<GlobExpression>,
     root_path: &str,
 ) {
-    let transformed_tree = transform_tree(tree, &origin_files, root_path);
+    let transformed_source_tree = transform_tree(tree, &origin_files, root_path);
 
     for destination in destinations.iter() {
         let main_ref = "main";
@@ -231,6 +232,8 @@ async fn update_destinations(
         )
         .await;
 
+        let events = transformed_source_tree.generate_events(&destination_tree);
+
         let destination_main =
             get_branch(&octocrab, &destination.owner, &destination.name, &main_ref)
                 .await
@@ -248,18 +251,22 @@ async fn update_destinations(
         .await
         .unwrap();
 
-        for (path, node) in &transformed_tree {
-            if let Some(content_value) = &node.content {
-                create_file(
-                    &octocrab,
-                    &destination.owner,
-                    &destination.name,
-                    &path,
-                    &content_value,
-                    &destination_branch_name,
-                )
-                .await;
-            }
+        for event in events.iter() {
+            match &event {
+                Event::Create { path, content } => {
+                    create_file(
+                        &octocrab,
+                        &destination.owner,
+                        &destination.name,
+                        &path,
+                        content.as_ref(),
+                        &destination_branch_name,
+                    )
+                    .await
+                }
+                Event::Update { path, content } => todo!(),
+                Event::Delete { path } => todo!(),
+            };
         }
     }
 }
@@ -314,10 +321,15 @@ async fn create_file(
     owner: &str,
     repo: &str,
     file_name: &str,
-    content: &str,
+    content: Option<&String>,
     branch: &str,
 ) -> CreateFileResponse {
-    let encoded_content = base64::encode(content);
+    let mapped_content = match content {
+        Some(value) => value,
+        None => "",
+    };
+
+    let encoded_content = base64::encode(mapped_content);
 
     let body = CreateFileBody {
         message: file_name.to_string(),
