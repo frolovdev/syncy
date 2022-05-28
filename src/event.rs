@@ -9,5 +9,6 @@ pub enum Event {
     },
     Delete {
         path: String,
+        sha: String,
     },
 }

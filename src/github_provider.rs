@@ -1,11 +1,11 @@
 use async_recursion::async_recursion;
 use git_tree::GitTree;
-use octocrab::models::repos::{Content, ContentItems};
+use octocrab::models::repos::{Commit, Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
+use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression, Transformation};
 use crate::event::Event;
 use crate::git_tree;
 
@@ -66,6 +66,7 @@ pub async fn call(config: EnhancedParsedConfig) {
         config.origin_files,
         config.destination_files,
         &root_path,
+        &config.transformations,
     )
     .await
 }
@@ -114,6 +115,7 @@ async fn unwrap_file(
         path: file_path.to_string(),
         content: decoded_content,
         git_url: content.git_url.clone(),
+        sha: content.sha.clone(),
     };
     tree.insert(file_path.to_string(), created_node);
 }
@@ -204,10 +206,13 @@ async fn update_destinations(
     destination_branch_name: String,
     tree: git_tree::Tree,
     origin_files: Option<GlobExpression>,
-    _destination_files: Option<GlobExpression>,
+    destination_files: Option<GlobExpression>,
     root_path: &str,
+    transformations: &Option<Vec<Transformation>>,
 ) {
-    let transformed_source_tree = transform_tree(tree, &origin_files, root_path);
+    let transformed_source_tree = tree.transform_tree(&origin_files, root_path);
+    let transformed_source_tree_with_applied_transformations =
+        transformed_source_tree.apply_transformations(transformations);
 
     for destination in destinations.iter() {
         let main_ref = "main";
@@ -232,7 +237,11 @@ async fn update_destinations(
         )
         .await;
 
-        let events = transformed_source_tree.generate_events(&destination_tree);
+        let transformed_destination_tree =
+            destination_tree.transform_tree(&destination_files, root_path);
+
+        let events = transformed_source_tree_with_applied_transformations
+            .generate_events(&transformed_destination_tree);
 
         let destination_main =
             get_branch(&octocrab, &destination.owner, &destination.name, &main_ref)
@@ -262,45 +271,22 @@ async fn update_destinations(
                         content.as_ref(),
                         &destination_branch_name,
                     )
-                    .await
+                    .await;
                 }
                 Event::Update { path, content } => todo!(),
-                Event::Delete { path } => todo!(),
+                Event::Delete { path, sha } => {
+                    delete_file(
+                        &octocrab,
+                        &destination.owner,
+                        &destination.name,
+                        &path,
+                        &sha,
+                    )
+                    .await;
+                }
             };
         }
     }
-}
-
-fn transform_tree(
-    git_tree: git_tree::Tree,
-    origin_files: &Option<GlobExpression>,
-    root_path: &str,
-) -> git_tree::Tree {
-    let unwrapped_origin = origin_files.as_ref().unwrap();
-
-    let mut new_tree = git_tree::Tree::new();
-    for (key, node) in git_tree {
-        match unwrapped_origin {
-            GlobExpression::Single(pattern) => {
-                if pattern.matches(&key) {
-                    let new_val =
-                        key.trim_start_matches(&format!("{root_path}/", root_path = root_path));
-
-                    new_tree.insert(new_val.to_string(), node);
-                }
-            }
-            GlobExpression::SingleWithExclude(include_pattern, exclude_pattern) => {
-                if include_pattern.matches(&key) && !exclude_pattern.matches(&key) {
-                    let new_val =
-                        key.trim_start_matches(&format!("{root_path}/", root_path = root_path));
-
-                    new_tree.insert(new_val.to_string(), node);
-                }
-            }
-        }
-    }
-
-    new_tree
 }
 
 #[derive(Debug, Serialize)]
@@ -320,7 +306,7 @@ async fn create_file(
     octocrab: &Arc<Octocrab>,
     owner: &str,
     repo: &str,
-    file_name: &str,
+    path: &str,
     content: Option<&String>,
     branch: &str,
 ) -> CreateFileResponse {
@@ -332,20 +318,57 @@ async fn create_file(
     let encoded_content = base64::encode(mapped_content);
 
     let body = CreateFileBody {
-        message: file_name.to_string(),
+        message: path.to_string(),
         content: encoded_content,
         branch: branch.to_string(),
     };
 
     let route = format!(
-        "/repos/{owner}/{repo}/contents/{file_name}",
+        "/repos/{owner}/{repo}/contents/{path}",
         owner = owner,
         repo = repo,
-        file_name = file_name
+        path = path
     );
 
     octocrab
         .put::<CreateFileResponse, _, _>(route, Some(&body))
+        .await
+        .unwrap()
+}
+
+#[derive(Debug, Serialize)]
+struct DeleteFileBody {
+    message: String,
+    sha: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct DeleteFileResponse {
+    content: Option<String>,
+    commit: Commit,
+}
+
+async fn delete_file(
+    octocrab: &Arc<Octocrab>,
+    owner: &str,
+    repo: &str,
+    path: &str,
+    sha: &str,
+) -> DeleteFileResponse {
+    let route = format!(
+        "/repos/{owner}/{repo}/contents/{path}",
+        owner = owner,
+        repo = repo,
+        path = path
+    );
+
+    let body = DeleteFileBody {
+        sha: sha.to_string(),
+        message: path.to_string(),
+    };
+
+    octocrab
+        .delete::<DeleteFileResponse, _, _>(route, Some(&body))
         .await
         .unwrap()
 }

@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
-use crate::{cli::GlobExpression, event::Event};
+use crate::{
+    cli::{GlobExpression, Transformation},
+    event::Event,
+};
 
 #[derive(Debug, PartialEq)]
 pub struct Node {
     pub path: String,
     pub content: Option<String>,
     pub git_url: String,
+    pub sha: String,
 }
 
 pub type Tree = HashMap<String, Node>;
@@ -15,6 +19,8 @@ pub trait GitTree {
     fn transform_tree(self, origin_files_glob: &Option<GlobExpression>, root_path: &str) -> Tree;
 
     fn generate_events(&self, destination_tree: &Tree) -> Vec<Event>;
+
+    fn apply_transformations(self, transformations: &Option<Vec<Transformation>>) -> Tree;
 }
 
 impl GitTree for HashMap<String, Node> {
@@ -62,15 +68,49 @@ impl GitTree for HashMap<String, Node> {
             }
         }
 
-        for (dest_key, _) in destination_tree.iter() {
+        for (dest_key, dest_node) in destination_tree.iter() {
             if !self.contains_key(dest_key) {
                 events.push(Event::Delete {
                     path: dest_key.to_string(),
+                    sha: dest_node.sha.to_string(),
                 })
             }
         }
 
         events
+    }
+
+    fn apply_transformations(self, transformations: &Option<Vec<Transformation>>) -> Tree {
+        if let None = transformations {
+            return self;
+        }
+        let mut new_tree = Tree::new();
+
+        for (path, node) in self {
+            let mut new_path = "".to_string();
+            for t in transformations.as_ref().unwrap().iter() {
+                match t {
+                    Transformation::Move { args } => {
+                        if path.starts_with(&args.before) {
+                            let trimmed_before_val = path.trim_start_matches(&format!(
+                                "{prefix_path}/",
+                                prefix_path = args.before
+                            ));
+
+                            new_path = format!(
+                                "{prefix}/{val}",
+                                val = trimmed_before_val,
+                                prefix = args.after
+                            );
+                        }
+                    }
+                };
+            }
+
+            new_tree.insert(new_path, node);
+        }
+
+        new_tree
     }
 }
 
@@ -91,6 +131,7 @@ mod tests {
                 path: "folder/file1".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
+                sha: "x132".to_string(),
             },
         );
         tree.insert(
@@ -99,6 +140,7 @@ mod tests {
                 path: "folder/folder2/file2".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
+                sha: "x132".to_string(),
             },
         );
         tree.insert(
@@ -107,6 +149,7 @@ mod tests {
                 path: "folder/file3".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
+                sha: "x132".to_string(),
             },
         );
 
@@ -121,6 +164,7 @@ mod tests {
                 path: "folder/folder2/file2".to_string(),
                 content: Some("".to_string()),
                 git_url: "".to_string(),
+                sha: "x132".to_string(),
             },
         );
 

@@ -31,8 +31,8 @@ pub struct DestinationRepository {
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 
 pub struct MoveArgs {
-    before: String,
-    after: String,
+    pub before: String,
+    pub after: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -120,6 +120,7 @@ pub struct EnhancedParsedConfig {
     pub token: String,
     pub destination_files: Option<GlobExpression>,
     pub origin_files: Option<GlobExpression>,
+    pub transformations: Option<Vec<Transformation>>,
 }
 
 pub fn run() -> Result<EnhancedParsedConfig, Box<dyn std::error::Error>> {
@@ -170,6 +171,7 @@ fn enhance_config(config: ParsedConfig) -> EnhancedParsedConfig {
         token: config.token,
         destination_files: Some(destination_files_glob),
         origin_files: Some(origin_files_glob),
+        transformations: config.transformations,
     }
 }
 
