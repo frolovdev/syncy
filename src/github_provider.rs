@@ -31,7 +31,7 @@ pub async fn call(config: EnhancedParsedConfig) {
     .unwrap();
 
     let mut tree = git_tree::Tree::new();
-    into_nodes_from_content_items(
+    fill_tree_with_nodes(
         &instance,
         &config.source.owner,
         &config.source.name,
@@ -71,7 +71,7 @@ pub async fn call(config: EnhancedParsedConfig) {
     .await
 }
 
-pub async fn into_nodes_from_content_items<'a>(
+pub async fn fill_tree_with_nodes<'a>(
     instance: &Arc<Octocrab>,
     owner: &str,
     repo: &str,
@@ -133,7 +133,7 @@ async fn unwrap_folder(
         .await
         .unwrap();
 
-    into_nodes_from_content_items(instance, &owner, &repo, &git_ref, &content_items, tree).await;
+    fill_tree_with_nodes(instance, &owner, &repo, &git_ref, &content_items, tree).await;
 }
 
 async fn get_repo(
@@ -235,7 +235,7 @@ async fn update_destinations(
         .unwrap();
 
         let mut destination_tree = git_tree::Tree::new();
-        into_nodes_from_content_items(
+        fill_tree_with_nodes(
             &octocrab,
             &destination.owner,
             &destination.name,
