@@ -131,8 +131,6 @@ pub fn run() -> Result<EnhancedParsedConfig, Box<dyn std::error::Error>> {
 
     let content = parse_config(&result).expect("Can't parse config");
 
-    println!("{:?}", content);
-
     let enhanced_config = enhance_config(content);
 
     Ok(enhanced_config)

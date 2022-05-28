@@ -60,7 +60,7 @@ impl GitTree for HashMap<String, Node> {
                 Some(destination_node) => events.push(Event::Update {
                     sha: destination_node.sha.to_string(),
                     path: source_key.to_string(),
-                    content: destination_node.content.clone(),
+                    content: source_node.content.clone(),
                 }),
                 None => events.push(Event::Create {
                     path: source_key.to_string(),

@@ -3,7 +3,9 @@ use git_tree::GitTree;
 use octocrab::models::repos::{Commit, Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
 use serde::{Deserialize, Serialize};
+use core::panic;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression, Transformation};
 use crate::event::Event;
@@ -181,11 +183,19 @@ async fn create_branch(
 }
 
 fn get_destination_branch_name(owner: &str, repo: &str, source_commit_ref: &str) -> String {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    let in_ms = since_the_epoch.as_millis();
+
     format!(
-        "syncy/{owner}/{repo}/{source_commit_ref}",
+        "syncy/{owner}/{repo}/{timestamp}",
         owner = owner,
         repo = repo,
-        source_commit_ref = source_commit_ref
+        // source_commit_ref = source_commit_ref,
+        timestamp = in_ms
     )
 }
 
@@ -399,7 +409,7 @@ struct UpdateFileBody {
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct UpdateFileResponse {
-    content: Option<String>,
+    content: octocrab::models::repos::Content,
     commit: Commit,
 }
 
@@ -411,7 +421,7 @@ async fn update_file(
     content: Option<&String>,
     sha: &str,
     branch: &str,
-) -> UpdateFileResponse {
+) {
     let mapped_content = match content {
         Some(value) => value,
         None => "",
@@ -435,8 +445,7 @@ async fn update_file(
 
     octocrab
         .put::<UpdateFileResponse, _, _>(route, Some(&body))
-        .await
-        .unwrap()
+        .await.unwrap();    
 }
 
 #[cfg(test)]
