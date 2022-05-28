@@ -58,7 +58,7 @@ impl GitTree for HashMap<String, Node> {
             let destination_node = destination_tree.get(source_key);
             match destination_node {
                 Some(destination_node) => events.push(Event::Update {
-                    sha: destination_node.sha,
+                    sha: destination_node.sha.to_string(),
                     path: source_key.to_string(),
                     content: destination_node.content.clone(),
                 }),
