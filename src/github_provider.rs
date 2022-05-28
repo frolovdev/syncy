@@ -292,7 +292,6 @@ async fn update_destinations(
 #[derive(Debug, Serialize)]
 struct CreateFileBody {
     message: String,
-    // committer: Committer,
     content: String,
     branch: String,
 }
@@ -379,7 +378,6 @@ async fn delete_file(
 #[derive(Debug, Serialize)]
 struct UpdateFileBody {
     message: String,
-    // committer: Committer,
     content: String,
     branch: String,
     sha: String,
