@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression, Transformation};
+use crate::cli::{EnhancedParsedConfig};
 use crate::event::Event;
 use crate::git_tree;
 
 pub async fn call(config: EnhancedParsedConfig) {
-    let octacrab_builder = octocrab::Octocrab::builder().personal_token(config.token);
+    let octacrab_builder = octocrab::Octocrab::builder().personal_token(config.token.clone());
 
     octocrab::initialise(octacrab_builder).unwrap();
 
@@ -42,35 +42,7 @@ pub async fn call(config: EnhancedParsedConfig) {
     )
     .await;
 
-    let source_branch = get_branch(
-        &instance,
-        &config.source.owner,
-        &config.source.name,
-        &config.source.git_ref,
-    )
-    .await
-    .unwrap();
-
-    let last_ref_commit_from_source = get_sha(&source_branch.object).unwrap();
-
-    let destination_branch_name = get_destination_branch_name(
-        &config.source.owner,
-        &config.source.name,
-        &last_ref_commit_from_source,
-    );
-
-    update_destinations(
-        &instance,
-        config.destinations,
-        destination_branch_name,
-        tree,
-        config.origin_files,
-        config.destination_files,
-        &root_path,
-        &config.transformations,
-        &config.source.git_ref,
-    )
-    .await
+    update_destinations(&instance, config, tree, &root_path).await
 }
 
 pub async fn fill_tree_with_nodes<'a>(
@@ -182,7 +154,7 @@ async fn create_branch(
         .await
 }
 
-fn get_destination_branch_name(owner: &str, repo: &str, source_commit_ref: &str) -> String {
+fn get_destination_branch_name(owner: &str, repo: &str) -> String {
     let start = SystemTime::now();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
@@ -194,7 +166,6 @@ fn get_destination_branch_name(owner: &str, repo: &str, source_commit_ref: &str)
         "syncy/{owner}/{repo}/{timestamp}",
         owner = owner,
         repo = repo,
-        // source_commit_ref = source_commit_ref,
         timestamp = in_ms
     )
 }
@@ -208,20 +179,18 @@ fn get_sha(object: &models::repos::Object) -> Option<String> {
 
 async fn update_destinations(
     octocrab: &Arc<Octocrab>,
-    destinations: Vec<DestinationRepository>,
-    destination_branch_name: String,
+    config: EnhancedParsedConfig,
     tree: git_tree::Tree,
-    origin_files: Option<GlobExpression>,
-    destination_files: Option<GlobExpression>,
     root_path: &str,
-    transformations: &Option<Vec<Transformation>>,
-    source_branch: &str,
 ) {
-    let transformed_source_tree = tree.transform_tree(&origin_files, root_path);
-    let transformed_source_tree_with_applied_transformations =
-        transformed_source_tree.apply_transformations(transformations);
+    let destination_branch_name =
+        get_destination_branch_name(&config.source.owner, &config.source.name);
 
-    for destination in destinations.iter() {
+    let transformed_source_tree = tree.transform_tree(&config.origin_files, root_path);
+    let transformed_source_tree_with_applied_transformations =
+        transformed_source_tree.apply_transformations(&config.transformations);
+
+    for destination in config.destinations.iter() {
         let main_ref = "main";
         let source_repo_content = get_repo(
             &octocrab,
@@ -245,7 +214,7 @@ async fn update_destinations(
         .await;
 
         let transformed_destination_tree =
-            destination_tree.transform_tree(&destination_files, root_path);
+            destination_tree.transform_tree(&config.destination_files, root_path);
 
         let events = transformed_source_tree_with_applied_transformations
             .generate_events(&transformed_destination_tree);
@@ -309,7 +278,9 @@ async fn update_destinations(
             &octocrab,
             &destination.owner,
             &destination.name,
-            source_branch,
+            &config.source.owner,
+            &config.source.name,
+            &config.source.git_ref,
             &destination_branch_name,
             &main_ref,
         )
@@ -458,7 +429,7 @@ async fn update_file(
 
 fn get_pull_request_name(owner: &str, repo: &str, source_branch: &str) -> String {
     format!(
-        "Update from {owner}/{repo} branch: ${branch}",
+        "Update from {owner}/{repo} branch: {branch}",
         owner = owner,
         repo = repo,
         branch = source_branch
@@ -473,7 +444,7 @@ fn get_pull_request_body(owner: &str, repo: &str, source_branch: &str) -> String
         branch = source_branch
     );
     format!(
-        "Update from {owner}/{repo} branch: {branch}\nlink to original repo: {link}",
+        "Update from {owner}/{repo} branch: {branch}\n\nlink to the original repo: {link}",
         owner = owner,
         repo = repo,
         branch = source_branch,
@@ -485,6 +456,8 @@ async fn create_pull_request(
     octocrab: &Arc<Octocrab>,
     owner: &str,
     repo: &str,
+    source_owner: &str,
+    source_repo: &str,
     source_branch: &str,
     destination_branch_name: &str,
     base_ref: &str,
@@ -492,11 +465,15 @@ async fn create_pull_request(
     octocrab
         .pulls(owner, repo)
         .create(
-            get_pull_request_name(owner, repo, source_branch),
+            get_pull_request_name(source_owner, source_repo, source_branch),
             destination_branch_name,
             base_ref,
         )
-        .body(get_pull_request_body(owner, repo, source_branch))
+        .body(get_pull_request_body(
+            source_owner,
+            source_repo,
+            source_branch,
+        ))
         .send()
         .await
 }
