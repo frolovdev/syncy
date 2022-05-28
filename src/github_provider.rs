@@ -58,11 +58,9 @@ pub async fn call(config: EnhancedParsedConfig) {
         &last_ref_commit_from_source,
     );
 
-    let val = instance.clone();
-    let destinations = Arc::new(config.destinations);
     update_destinations(
-        val,
-        destinations,
+        &instance,
+        config.destinations,
         destination_branch_name,
         tree,
         config.origin_files,
@@ -211,8 +209,8 @@ fn get_sha(object: &models::repos::Object) -> Option<String> {
 }
 
 async fn update_destinations(
-    octocrab: Arc<Octocrab>,
-    destinations: Arc<Vec<DestinationRepository>>,
+    octocrab: &Arc<Octocrab>,
+    destinations: Vec<DestinationRepository>,
     destination_branch_name: String,
     tree: git_tree::Tree,
     origin_files: Option<GlobExpression>,
