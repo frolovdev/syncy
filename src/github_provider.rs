@@ -273,7 +273,18 @@ async fn update_destinations(
                     )
                     .await;
                 }
-                Event::Update { path, content } => todo!(),
+                Event::Update { path, content, sha } => {
+                    update_file(
+                        &octocrab,
+                        &destination.owner,
+                        &destination.name,
+                        path,
+                        content.as_ref(),
+                        sha,
+                        &destination_branch_name,
+                    )
+                    .await;
+                }
                 Event::Delete { path, sha } => {
                     delete_file(
                         &octocrab,
@@ -281,6 +292,7 @@ async fn update_destinations(
                         &destination.name,
                         &path,
                         &sha,
+                        &destination_branch_name,
                     )
                     .await;
                 }
@@ -340,6 +352,7 @@ async fn create_file(
 struct DeleteFileBody {
     message: String,
     sha: String,
+    branch: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -354,6 +367,7 @@ async fn delete_file(
     repo: &str,
     path: &str,
     sha: &str,
+    branch: &str,
 ) -> DeleteFileResponse {
     let route = format!(
         "/repos/{owner}/{repo}/contents/{path}",
@@ -365,10 +379,62 @@ async fn delete_file(
     let body = DeleteFileBody {
         sha: sha.to_string(),
         message: path.to_string(),
+        branch: branch.to_string(),
     };
 
     octocrab
         .delete::<DeleteFileResponse, _, _>(route, Some(&body))
+        .await
+        .unwrap()
+}
+
+#[derive(Debug, Serialize)]
+struct UpdateFileBody {
+    message: String,
+    // committer: Committer,
+    content: String,
+    branch: String,
+    sha: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct UpdateFileResponse {
+    content: Option<String>,
+    commit: Commit,
+}
+
+async fn update_file(
+    octocrab: &Arc<Octocrab>,
+    owner: &str,
+    repo: &str,
+    path: &str,
+    content: Option<&String>,
+    sha: &str,
+    branch: &str,
+) -> UpdateFileResponse {
+    let mapped_content = match content {
+        Some(value) => value,
+        None => "",
+    };
+
+    let encoded_content = base64::encode(mapped_content);
+
+    let body = UpdateFileBody {
+        message: path.to_string(),
+        content: encoded_content,
+        branch: branch.to_string(),
+        sha: sha.to_string(),
+    };
+
+    let route = format!(
+        "/repos/{owner}/{repo}/contents/{path}",
+        owner = owner,
+        repo = repo,
+        path = path
+    );
+
+    octocrab
+        .put::<UpdateFileResponse, _, _>(route, Some(&body))
         .await
         .unwrap()
 }

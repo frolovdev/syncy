@@ -6,6 +6,7 @@ pub enum Event {
     Update {
         path: String,
         content: Option<String>,
+        sha: String,
     },
     Delete {
         path: String,
