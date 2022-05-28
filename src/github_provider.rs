@@ -1,9 +1,9 @@
 use async_recursion::async_recursion;
+use core::panic;
 use git_tree::GitTree;
 use octocrab::models::repos::{Commit, Content, ContentItems};
 use octocrab::{models, params::repos::Reference, Octocrab};
 use serde::{Deserialize, Serialize};
-use core::panic;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -31,6 +31,7 @@ pub async fn call(config: EnhancedParsedConfig) {
     .unwrap();
 
     let mut tree = git_tree::Tree::new();
+
     fill_tree_with_nodes(
         &instance,
         &config.source.owner,
@@ -67,6 +68,7 @@ pub async fn call(config: EnhancedParsedConfig) {
         config.destination_files,
         &root_path,
         &config.transformations,
+        &config.source.git_ref,
     )
     .await
 }
@@ -197,10 +199,6 @@ fn get_destination_branch_name(owner: &str, repo: &str, source_commit_ref: &str)
     )
 }
 
-fn get_pull_request_name() {
-    // Update from {owner}/{repo} branch: ${branch} ref: 4da4b22ac75d363d168ce109d51c80921cacebcb
-}
-
 fn get_sha(object: &models::repos::Object) -> Option<String> {
     match object {
         models::repos::Object::Commit { sha, .. } => Some(sha.to_string()),
@@ -217,6 +215,7 @@ async fn update_destinations(
     destination_files: Option<GlobExpression>,
     root_path: &str,
     transformations: &Option<Vec<Transformation>>,
+    source_branch: &str,
 ) {
     let transformed_source_tree = tree.transform_tree(&origin_files, root_path);
     let transformed_source_tree_with_applied_transformations =
@@ -306,6 +305,16 @@ async fn update_destinations(
                 }
             };
         }
+        create_pull_request(
+            &octocrab,
+            &destination.owner,
+            &destination.name,
+            source_branch,
+            &destination_branch_name,
+            &main_ref,
+        )
+        .await
+        .unwrap();
     }
 }
 
@@ -443,7 +452,53 @@ async fn update_file(
 
     octocrab
         .put::<UpdateFileResponse, _, _>(route, Some(&body))
-        .await.unwrap();    
+        .await
+        .unwrap();
+}
+
+fn get_pull_request_name(owner: &str, repo: &str, source_branch: &str) -> String {
+    format!(
+        "Update from {owner}/{repo} branch: ${branch}",
+        owner = owner,
+        repo = repo,
+        branch = source_branch
+    )
+}
+
+fn get_pull_request_body(owner: &str, repo: &str, source_branch: &str) -> String {
+    let link = format!(
+        "https://github.com/{owner}/{repo}/{branch}",
+        owner = owner,
+        repo = repo,
+        branch = source_branch
+    );
+    format!(
+        "Update from {owner}/{repo} branch: {branch}\nlink to original repo: {link}",
+        owner = owner,
+        repo = repo,
+        branch = source_branch,
+        link = link
+    )
+}
+
+async fn create_pull_request(
+    octocrab: &Arc<Octocrab>,
+    owner: &str,
+    repo: &str,
+    source_branch: &str,
+    destination_branch_name: &str,
+    base_ref: &str,
+) -> Result<octocrab::models::pulls::PullRequest, octocrab::Error> {
+    octocrab
+        .pulls(owner, repo)
+        .create(
+            get_pull_request_name(owner, repo, source_branch),
+            destination_branch_name,
+            base_ref,
+        )
+        .body(get_pull_request_body(owner, repo, source_branch))
+        .send()
+        .await
 }
 
 #[cfg(test)]
