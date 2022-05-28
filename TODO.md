@@ -3,7 +3,7 @@ https://github.com/octokit/octokit.js/issues/509#issuecomment-370764629
 https://retool.com/blog/gotchas-git-github-api/
 
 TODOS: 
-* Create pull request
+* ✅ Create pull request
 * Configure commiters
 * Write some tests
-* Support one commit for the pull request
+* Support one commit for the pull request (by introducing git tree)
