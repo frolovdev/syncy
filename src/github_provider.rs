@@ -1,4 +1,5 @@
 use async_recursion::async_recursion;
+use async_trait::async_trait;
 use core::panic;
 use git_tree::GitTree;
 use octocrab::models::repos::{Commit, Content, ContentItems};
@@ -7,42 +8,202 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::cli::{EnhancedParsedConfig};
-use crate::event::Event;
+use crate::cli::{DestinationRepository, EnhancedParsedConfig};
 use crate::git_tree;
+use crate::provider::Provider;
 
-pub async fn call(config: EnhancedParsedConfig) {
-    let octacrab_builder = octocrab::Octocrab::builder().personal_token(config.token.clone());
+pub struct GithubProvider {
+    pub config: EnhancedParsedConfig,
+}
 
-    octocrab::initialise(octacrab_builder).unwrap();
+#[async_trait]
+impl Provider<Arc<octocrab::Octocrab>> for GithubProvider {
+    fn configure_provider(&self) -> Arc<octocrab::Octocrab> {
+        let octacrab_builder =
+            octocrab::Octocrab::builder().personal_token(self.config.token.clone());
 
-    let instance: Arc<octocrab::Octocrab> = octocrab::instance();
+        octocrab::initialise(octacrab_builder).unwrap();
 
-    let root_path = "".to_string();
+        let instance: Arc<octocrab::Octocrab> = octocrab::instance();
 
-    let source_repo_content = get_repo(
-        &instance,
-        &config.source.owner,
-        &config.source.name,
-        &config.source.git_ref,
-        &root_path,
-    )
-    .await
-    .unwrap();
+        instance
+    }
 
-    let mut tree = git_tree::Tree::new();
+    async fn create_source_tree(&self, instance: Arc<octocrab::Octocrab>) -> git_tree::Tree {
+        let root_path = "".to_string();
 
-    fill_tree_with_nodes(
-        &instance,
-        &config.source.owner,
-        &config.source.name,
-        &config.source.git_ref,
-        &source_repo_content,
-        &mut tree,
-    )
-    .await;
+        let source_repo_content = get_repo(
+            &instance,
+            &self.config.source.owner,
+            &self.config.source.name,
+            &self.config.source.git_ref,
+            &root_path,
+        )
+        .await
+        .unwrap();
 
-    update_destinations(&instance, config, tree, &root_path).await
+        let mut tree = git_tree::Tree::new();
+
+        fill_tree_with_nodes(
+            &instance,
+            &self.config.source.owner,
+            &self.config.source.name,
+            &self.config.source.git_ref,
+            &source_repo_content,
+            &mut tree,
+        )
+        .await;
+
+        let transformed_source_tree = tree.transform_tree(&self.config.origin_files, &root_path);
+        let transformed_source_tree_with_applied_transformations =
+            transformed_source_tree.apply_transformations(&self.config.transformations);
+
+        transformed_source_tree_with_applied_transformations
+    }
+
+    async fn create_destination_branch(
+        &self,
+        instance: Arc<octocrab::Octocrab>,
+        destination: &DestinationRepository,
+        destination_branch_name: &str,
+    ) {
+        let main_ref = "main";
+
+        let destination_main =
+            get_branch(&instance, &destination.owner, &destination.name, &main_ref)
+                .await
+                .unwrap();
+
+        let commit_ref = get_sha(&destination_main.object).unwrap();
+
+        create_branch(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            &destination_branch_name,
+            &commit_ref,
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn create_destination_tree(
+        &self,
+        instance: Arc<Octocrab>,
+        destination: &DestinationRepository,
+    ) -> git_tree::Tree {
+        let root_path = "".to_string();
+        let main_ref = "main";
+
+        let repo_content = get_repo(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            &main_ref,
+            &root_path,
+        )
+        .await
+        .unwrap();
+
+        let mut destination_tree = git_tree::Tree::new();
+        fill_tree_with_nodes(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            &main_ref,
+            &repo_content,
+            &mut destination_tree,
+        )
+        .await;
+
+        let transformed_destination_tree =
+            destination_tree.transform_tree(&self.config.destination_files, &root_path);
+
+        transformed_destination_tree
+    }
+
+    async fn create_file(
+        instance: Arc<Octocrab>,
+        destination: &DestinationRepository,
+        path: &str,
+        content: &Option<String>,
+        destination_branch_name: &str,
+    ) {
+        create_file(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            &path,
+            content.as_ref(),
+            &destination_branch_name,
+        )
+        .await;
+    }
+
+    async fn update_file(
+        instance: Arc<Octocrab>,
+        destination: &DestinationRepository,
+        path: &str,
+        content: &Option<String>,
+        sha: &str,
+        destination_branch_name: &str,
+    ) {
+        update_file(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            path,
+            content.as_ref(),
+            sha,
+            &destination_branch_name,
+        )
+        .await
+    }
+
+    async fn delete_file(
+        instance: Arc<Octocrab>,
+        destination: &DestinationRepository,
+        path: &str,
+        sha: &str,
+        destination_branch_name: &str,
+    ) {
+        delete_file(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            &path,
+            &sha,
+            &destination_branch_name,
+        )
+        .await;
+    }
+
+    fn get_destination_branch(&self) -> String {
+        let branch =
+            get_destination_branch_name(&self.config.source.owner, &self.config.source.name);
+
+        branch
+    }
+
+    async fn create_pull_request_destination(
+        &self,
+        instance: Arc<octocrab::Octocrab>,
+        destination: &DestinationRepository,
+        destination_branch_name: &str,
+    ) {
+        let main_ref = "main";
+        create_pull_request(
+            &instance,
+            &destination.owner,
+            &destination.name,
+            &self.config.source.owner,
+            &self.config.source.name,
+            &self.config.source.git_ref,
+            &destination_branch_name,
+            &main_ref,
+        )
+        .await;
+    }
 }
 
 pub async fn fill_tree_with_nodes<'a>(
@@ -174,118 +335,6 @@ fn get_sha(object: &models::repos::Object) -> Option<String> {
     match object {
         models::repos::Object::Commit { sha, .. } => Some(sha.to_string()),
         _ => None,
-    }
-}
-
-async fn update_destinations(
-    octocrab: &Arc<Octocrab>,
-    config: EnhancedParsedConfig,
-    tree: git_tree::Tree,
-    root_path: &str,
-) {
-    let destination_branch_name =
-        get_destination_branch_name(&config.source.owner, &config.source.name);
-
-    let transformed_source_tree = tree.transform_tree(&config.origin_files, root_path);
-    let transformed_source_tree_with_applied_transformations =
-        transformed_source_tree.apply_transformations(&config.transformations);
-
-    for destination in config.destinations.iter() {
-        let main_ref = "main";
-        let source_repo_content = get_repo(
-            &octocrab,
-            &destination.owner,
-            &destination.name,
-            &main_ref,
-            &root_path,
-        )
-        .await
-        .unwrap();
-
-        let mut destination_tree = git_tree::Tree::new();
-        fill_tree_with_nodes(
-            &octocrab,
-            &destination.owner,
-            &destination.name,
-            &main_ref,
-            &source_repo_content,
-            &mut destination_tree,
-        )
-        .await;
-
-        let transformed_destination_tree =
-            destination_tree.transform_tree(&config.destination_files, root_path);
-
-        let events = transformed_source_tree_with_applied_transformations
-            .generate_events(&transformed_destination_tree);
-
-        let destination_main =
-            get_branch(&octocrab, &destination.owner, &destination.name, &main_ref)
-                .await
-                .unwrap();
-
-        let commit_ref = get_sha(&destination_main.object).unwrap();
-
-        create_branch(
-            &octocrab,
-            &destination.owner,
-            &destination.name,
-            &destination_branch_name,
-            &commit_ref,
-        )
-        .await
-        .unwrap();
-
-        for event in events.iter() {
-            match &event {
-                Event::Create { path, content } => {
-                    create_file(
-                        &octocrab,
-                        &destination.owner,
-                        &destination.name,
-                        &path,
-                        content.as_ref(),
-                        &destination_branch_name,
-                    )
-                    .await;
-                }
-                Event::Update { path, content, sha } => {
-                    update_file(
-                        &octocrab,
-                        &destination.owner,
-                        &destination.name,
-                        path,
-                        content.as_ref(),
-                        sha,
-                        &destination_branch_name,
-                    )
-                    .await;
-                }
-                Event::Delete { path, sha } => {
-                    delete_file(
-                        &octocrab,
-                        &destination.owner,
-                        &destination.name,
-                        &path,
-                        &sha,
-                        &destination_branch_name,
-                    )
-                    .await;
-                }
-            };
-        }
-        create_pull_request(
-            &octocrab,
-            &destination.owner,
-            &destination.name,
-            &config.source.owner,
-            &config.source.name,
-            &config.source.git_ref,
-            &destination_branch_name,
-            &main_ref,
-        )
-        .await
-        .unwrap();
     }
 }
 

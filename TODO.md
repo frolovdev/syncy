@@ -4,6 +4,8 @@ https://retool.com/blog/gotchas-git-github-api/
 
 TODOS: 
 * ✅ Create pull request
-* Configure commiters
+* ✅ Refactor a bit for better testing
+* Allow to get only one file or folder in origina destination files
+* Parallel execution (mutithreading)
 * Write some tests
 * Support one commit for the pull request (by introducing git tree)
