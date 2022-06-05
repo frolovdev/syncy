@@ -16,11 +16,6 @@ pub struct GithubProvider {
     pub config: EnhancedParsedConfig,
 }
 
-#[derive(Serialize, Deserialize, PartialEq)]
-struct ConetentItemsDef {
-    items: Vec<Content>,
-}
-
 #[async_trait]
 impl Provider<Arc<octocrab::Octocrab>> for GithubProvider {
     fn configure_provider(&self, base_url: Option<String>) -> Arc<octocrab::Octocrab> {
@@ -542,22 +537,26 @@ async fn create_pull_request(
 
 #[cfg(test)]
 mod tests {
+    use crate::fixtures::content::get_content_json;
+    use crate::git_tree;
+    use crate::mocks::github::get_content_mock;
+    use std::vec;
+
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::{
+        cli::{DestinationRepository, EnhancedParsedConfig, SourceRepository},
+        github_provider::GithubProvider,
+        provider::Provider,
+    };
+    use octocrab::models::repos::{Commit, Content, ContentItems, ContentLinks};
+    use reqwest::Url;
+    use wiremock::matchers::any;
+
     mod create_source_tree {
-        use std::vec;
-
-        use super::super::ConetentItemsDef;
-        use serde_json::json;
-        use wiremock::matchers::{method, path};
-        use wiremock::{Mock, MockServer, ResponseTemplate};
-
-        use crate::{
-            cli::{DestinationRepository, EnhancedParsedConfig, SourceRepository},
-            github_provider::GithubProvider,
-            provider::Provider,
-        };
-        use octocrab::models::repos::{Commit, Content, ContentItems, ContentLinks};
-        use reqwest::Url;
-        use wiremock::matchers::any;
+        use super::*;
 
         #[tokio::test]
         async fn success() {
@@ -580,33 +579,36 @@ mod tests {
 
             let mock_server = MockServer::start().await;
 
-            let content_item_response = json!({
-                "path": "",
-                "name": "test1qwewqeqweqw",
-                "sha": "",
-                "content": "",
-                "size": 45,
-                "url": "",
-                "html_url": "",
-                "git_url": "",
-                "type": "file",
-                "_links": {
-                    "git": "https://example.net",
-                    "html": "https://example.net",
-                    "self": "https://example.net",
-                },
+            let content1 = get_content_json("test1", "test1", Some("my_content"), "file");
+            let content2 = get_content_json("test2", "test2", Some("my_content"), "file");
+            let content_item_response = json!([&content1, &content2]);
 
-            });
-            Mock::given(method("GET"))
-                .and(path(format!(
-                    "/repos/{owner}/{repo}/contents/{path}",
-                    owner = config.source.owner.to_string(),
-                    repo = config.source.name.to_string(),
-                    path = ""
-                )))
-                .respond_with(ResponseTemplate::new(200).set_body_json(content_item_response))
-                .mount(&mock_server)
-                .await;
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                None,
+                content_item_response,
+            )
+            .mount(&mock_server)
+            .await;
+
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                Some("test1"),
+                json!(content1),
+            )
+            .mount(&mock_server)
+            .await;
+
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                Some("test2"),
+                json!(content2),
+            )
+            .mount(&mock_server)
+            .await;
 
             let github_provider = GithubProvider { config };
 
@@ -614,7 +616,27 @@ mod tests {
 
             let source_tree = github_provider.create_source_tree(instance.clone()).await;
 
-            assert_eq!(1, 1);
+            let expected_tree = git_tree::Tree::from([
+                (
+                    "test1".to_string(),
+                    git_tree::Node {
+                        path: content1.path.to_string(),
+                        content: content1.decoded_content(),
+                        git_url: content1.git_url,
+                        sha: content1.sha,
+                    },
+                ),
+                (
+                    "test2".to_string(),
+                    git_tree::Node {
+                        path: content2.path.to_string(),
+                        content: content2.decoded_content(),
+                        git_url: content2.git_url,
+                        sha: content2.sha,
+                    },
+                ),
+            ]);
+            assert_eq!(source_tree, expected_tree);
         }
     }
 }

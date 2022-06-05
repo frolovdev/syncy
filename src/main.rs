@@ -8,6 +8,7 @@ mod event;
 mod fixtures;
 mod git_tree;
 mod github_provider;
+mod mocks;
 mod provider;
 
 #[tokio::main]

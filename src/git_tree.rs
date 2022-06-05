@@ -122,9 +122,8 @@ impl GitTree for HashMap<String, Node> {
 #[cfg(test)]
 mod tests {
 
-    use crate::fixtures::globs::create_glob_single;
-
     use super::{GitTree, Node, Tree};
+    use crate::fixtures::{content::get_content_json, globs::create_glob_single};
 
     #[test]
     fn test_success() {
