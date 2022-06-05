@@ -2,11 +2,9 @@ use async_trait::async_trait;
 
 use crate::{cli::DestinationRepository, git_tree};
 
-trait Config {}
-
 #[async_trait]
 pub trait Provider<T> {
-    fn configure_provider(&self) -> T;
+    fn configure_provider(&self, base_url: Option<String>) -> T;
 
     async fn create_source_tree(&self, instance: T) -> git_tree::Tree;
 
@@ -57,5 +55,3 @@ pub trait Provider<T> {
         destination_branch_name: &str,
     ) -> ();
 }
-
-trait Core {}

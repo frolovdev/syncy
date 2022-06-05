@@ -25,6 +25,10 @@ pub trait GitTree {
 
 impl GitTree for HashMap<String, Node> {
     fn transform_tree(self, origin_files_glob: &Option<GlobExpression>, root_path: &str) -> Self {
+        if let None = origin_files_glob {
+            return self;
+        }
+
         let unwrapped_origin_glob = origin_files_glob.as_ref().unwrap();
 
         let mut new_tree = Tree::new();

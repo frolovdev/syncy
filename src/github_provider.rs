@@ -16,11 +16,26 @@ pub struct GithubProvider {
     pub config: EnhancedParsedConfig,
 }
 
+#[derive(Serialize, Deserialize, PartialEq)]
+struct ConetentItemsDef {
+    items: Vec<Content>,
+}
+
 #[async_trait]
 impl Provider<Arc<octocrab::Octocrab>> for GithubProvider {
-    fn configure_provider(&self) -> Arc<octocrab::Octocrab> {
+    fn configure_provider(&self, base_url: Option<String>) -> Arc<octocrab::Octocrab> {
         let octacrab_builder =
             octocrab::Octocrab::builder().personal_token(self.config.token.clone());
+
+        if let Some(unwraped_base_url) = base_url {
+            let octacrab_builder = octacrab_builder.base_url(unwraped_base_url).unwrap();
+
+            octocrab::initialise(octacrab_builder).unwrap();
+
+            let instance: Arc<octocrab::Octocrab> = octocrab::instance();
+
+            return instance;
+        }
 
         octocrab::initialise(octacrab_builder).unwrap();
 
@@ -526,4 +541,80 @@ async fn create_pull_request(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    mod create_source_tree {
+        use std::vec;
+
+        use super::super::ConetentItemsDef;
+        use serde_json::json;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        use crate::{
+            cli::{DestinationRepository, EnhancedParsedConfig, SourceRepository},
+            github_provider::GithubProvider,
+            provider::Provider,
+        };
+        use octocrab::models::repos::{Commit, Content, ContentItems, ContentLinks};
+        use reqwest::Url;
+        use wiremock::matchers::any;
+
+        #[tokio::test]
+        async fn success() {
+            let config = EnhancedParsedConfig {
+                version: "0.1".to_string(),
+                source: SourceRepository {
+                    owner: "owner".to_string(),
+                    name: "repo1".to_string(),
+                    git_ref: "main".to_string(),
+                },
+                destinations: vec![DestinationRepository {
+                    owner: "owner".to_string(),
+                    name: "repo2".to_string(),
+                }],
+                token: "random_token".to_string(),
+                destination_files: None,
+                origin_files: None,
+                transformations: None,
+            };
+
+            let mock_server = MockServer::start().await;
+
+            let content_item_response = json!({
+                "path": "",
+                "name": "test1qwewqeqweqw",
+                "sha": "",
+                "content": "",
+                "size": 45,
+                "url": "",
+                "html_url": "",
+                "git_url": "",
+                "type": "file",
+                "_links": {
+                    "git": "https://example.net",
+                    "html": "https://example.net",
+                    "self": "https://example.net",
+                },
+
+            });
+            Mock::given(method("GET"))
+                .and(path(format!(
+                    "/repos/{owner}/{repo}/contents/{path}",
+                    owner = config.source.owner.to_string(),
+                    repo = config.source.name.to_string(),
+                    path = ""
+                )))
+                .respond_with(ResponseTemplate::new(200).set_body_json(content_item_response))
+                .mount(&mock_server)
+                .await;
+
+            let github_provider = GithubProvider { config };
+
+            let instance = github_provider.configure_provider(Some(mock_server.uri()));
+
+            let source_tree = github_provider.create_source_tree(instance.clone()).await;
+
+            assert_eq!(1, 1);
+        }
+    }
+}

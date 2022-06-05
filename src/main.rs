@@ -16,7 +16,7 @@ async fn main() {
 
     let github_provider = github_provider::GithubProvider { config };
 
-    let instance = github_provider.configure_provider();
+    let instance = github_provider.configure_provider(None);
 
     let source_tree = github_provider.create_source_tree(instance.clone()).await;
 
@@ -69,6 +69,12 @@ async fn main() {
             };
         }
 
-        github_provider.create_pull_request_destination(instance.clone(), &destination, &destination_branch_name).await;
+        github_provider
+            .create_pull_request_destination(
+                instance.clone(),
+                &destination,
+                &destination_branch_name,
+            )
+            .await;
     }
 }
