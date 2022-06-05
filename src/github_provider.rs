@@ -637,6 +637,8 @@ mod tests {
                 ),
             ]);
             assert_eq!(source_tree, expected_tree);
+
+            mock_server.verify().await;
         }
     }
 }
