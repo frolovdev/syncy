@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::cli::{DestinationRepository, EnhancedParsedConfig};
+use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
 use crate::git_tree;
 use crate::provider::Provider;
 
@@ -547,15 +547,22 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::{
-        cli::{DestinationRepository, EnhancedParsedConfig, SourceRepository},
+        cli::{DestinationRepository, EnhancedParsedConfig, SourceRepository, GlobExpression},
         github_provider::GithubProvider,
         provider::Provider,
     };
+    use glob;
     use octocrab::models::repos::{Commit, Content, ContentItems, ContentLinks};
     use reqwest::Url;
     use wiremock::matchers::any;
 
+    
+    #[cfg(test)]
     mod create_source_tree {
+        use std::net::TcpListener;
+
+        use crate::cli::{MoveArgs, Transformation};
+
         use super::*;
 
         #[tokio::test]
@@ -633,6 +640,116 @@ mod tests {
                         content: content2.decoded_content(),
                         git_url: content2.git_url,
                         sha: content2.sha,
+                    },
+                ),
+            ]);
+            assert_eq!(source_tree, expected_tree);
+
+            mock_server.verify().await;
+        }
+
+        #[tokio::test]
+        async fn complex_case() {
+            let config = EnhancedParsedConfig {
+                version: "0.1".to_string(),
+                source: SourceRepository {
+                    owner: "owner".to_string(),
+                    name: "repo1".to_string(),
+                    git_ref: "main".to_string(),
+                },
+                destinations: vec![DestinationRepository {
+                    owner: "owner".to_string(),
+                    name: "repo2".to_string(),
+                }],
+                token: "random_token".to_string(),
+                destination_files: Some(GlobExpression::Single(glob::Pattern::new("folder/**").unwrap()) ),
+                origin_files: Some(GlobExpression::Single(glob::Pattern::new("folder/**").unwrap()) ),
+                transformations: Some(vec![Transformation::Move {
+                    args: MoveArgs {
+                        before: "".to_string(),
+                        after: "repo_one_folder".to_string(),
+                    },
+                }]),
+            };
+
+            let mock_server = MockServer::start().await;
+
+            let source_file_root = get_content_json("test1", "test1", Some("my_content"), "file");
+            let source_content_folder = get_content_json("folder", "folder", None, "dir");
+            let source_content_file =
+                get_content_json("folder/test2", "test2", Some("my_content_2"), "file");
+            let source_content_file_second =
+                get_content_json("folder/test3", "test3", Some("my_content_3"), "file");
+
+            let content_item_response_first = json!([&source_file_root, &source_content_folder]);
+
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                None,
+                content_item_response_first,
+            )
+            .mount(&mock_server)
+            .await;
+
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                Some("test1"),
+                json!(source_file_root),
+            )
+            .mount(&mock_server)
+            .await;
+
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                Some("folder"),
+                json!([source_content_file, source_content_file_second]),
+            )
+            .mount(&mock_server)
+            .await;
+
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                Some("folder/test2"),
+                json!(source_content_file),
+            )
+            .mount(&mock_server)
+            .await;
+            get_content_mock(
+                &config.source.owner,
+                &config.source.name,
+                Some("folder/test3"),
+                json!(source_content_file_second),
+            )
+            .mount(&mock_server)
+            .await;
+
+            let github_provider = GithubProvider { config };
+
+            let instance = github_provider.configure_provider(Some(mock_server.uri()));
+
+            let source_tree = github_provider.create_source_tree(instance.clone()).await;
+
+            let expected_tree = git_tree::Tree::from([
+                (
+                    "repo_one_folder/folder/test2".to_string(),
+                    git_tree::Node {
+                        path: source_content_file.path.to_string(),
+                        content: source_content_file.decoded_content(),
+                        git_url: source_content_file.git_url,
+                        sha: source_content_file.sha,
+                    },
+                ),
+                (
+                    "repo_one_folder/folder/test3".to_string(),
+                    git_tree::Node {
+                        path: source_content_file_second.path.to_string(),
+                        content: source_content_file_second.decoded_content(),
+                        git_url: source_content_file_second.git_url,
+                        sha: source_content_file_second.sha,
                     },
                 ),
             ]);

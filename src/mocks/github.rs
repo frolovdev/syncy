@@ -15,5 +15,5 @@ pub fn get_content_mock(
             path = pathname.unwrap_or("")
         )))
         .respond_with(ResponseTemplate::new(200).set_body_json(response))
-        .expect(1)
+        .expect(1..)
 }
