@@ -3,7 +3,7 @@ pub mod parser;
 pub mod reader;
 
 pub use common::*;
-pub use parser::{GlobExpression, ParsedConfig, WorkDirExpression};
+pub use parser::{GlobExpression, MoveArgs, ParsedConfig, Transformation, WorkDirExpression};
 
 use anyhow::{Context, Result};
 use clap::Parser;

@@ -114,6 +114,7 @@ impl GitTree for HashMap<String, Node> {
                             );
                         }
                     }
+                    Transformation::Replace { args } => todo!(),
                 };
             }
 

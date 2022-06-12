@@ -1,14 +1,10 @@
 use crate::mocks::github::get_content_mock;
+use serde_json::json;
 use std::vec;
 use syncy::fixtures::content::get_content_json;
 use syncy::git_tree;
-
-use glob;
-use serde_json::json;
 use syncy::{
-    cli::{
-        DestinationRepository, GlobExpression, ParsedConfig, SourceRepository, WorkDirExpression,
-    },
+    cli::{DestinationRepository, ParsedConfig, SourceRepository},
     github_provider::GithubProvider,
     provider::Provider,
 };

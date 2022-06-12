@@ -1,3 +1,10 @@
+use crate::mocks::github::get_content_mock;
+use serde_json::json;
+use syncy::{
+    cli::{DestinationRepository, ParsedConfig, SourceRepository},
+    github_provider::GithubProvider,
+    provider::Provider,
+};
 use syncy::{
     event::Event,
     fixtures::{
@@ -5,22 +12,9 @@ use syncy::{
         workdir_path::{create_glob_single, create_workdir_path},
     },
 };
-
-use crate::mocks::github::get_content_mock;
-
-use glob;
-use serde_json::json;
-use syncy::{
-    cli::{DestinationRepository, GlobExpression, ParsedConfig, SourceRepository},
-    github_provider::GithubProvider,
-    provider::Provider,
-};
 use wiremock::MockServer;
 
-use syncy::cli::{
-    common::{MoveArgs, Transformation},
-    parser::WorkDirExpression,
-};
+use syncy::cli::{MoveArgs, Transformation};
 use syncy::git_tree::GitTree;
 
 #[tokio::test]

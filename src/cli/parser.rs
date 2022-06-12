@@ -1,9 +1,42 @@
 use regex::RegexSet;
 
 use super::{
-    common::{DestinationRepository, SourceRepository, Transformation},
+    common::{DestinationRepository, SourceRepository},
     reader,
 };
+use regex::Regex;
+use std::fmt::Debug;
+
+#[derive(Clone, Debug, PartialEq)]
+
+pub struct MoveArgs {
+    pub before: String,
+    pub after: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReplaceArgs {
+    before: CustomRegex,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomRegex(Regex);
+
+impl PartialEq for CustomRegex {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        self.0.as_str() != other.0.as_str()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Transformation {
+    Move { args: MoveArgs },
+    Replace { args: ReplaceArgs },
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParsedConfig {
@@ -42,7 +75,49 @@ pub fn parse_config(config: reader::Config) -> ParsedConfig {
         token: config.token,
         destination_files: destination_files_glob,
         origin_files: origin_files_glob,
-        transformations: config.transformations,
+        transformations: parse_transformations(&config.transformations),
+    }
+}
+
+fn parse_transformations(
+    transformations: &Option<Vec<serde_json::Value>>,
+) -> Option<Vec<Transformation>> {
+    if let Some(unwrapped_transformations) = transformations {
+        let mut parsed_transformations = Vec::new();
+        for t in unwrapped_transformations.iter() {
+            let parsed_transformation = &t
+                .get("fn")
+                .and_then(|v| {
+                    if v == "builtin.move" {
+                        let before = t
+                            .get("args")
+                            .and_then(|v| v.get("before"))
+                            .expect("builtin.move.args should contain before")
+                            .as_str()
+                            .unwrap()
+                            .to_owned();
+
+                        let after = t
+                            .get("args")
+                            .and_then(|v| v.get("after"))
+                            .expect("builtin.move.args should contain after")
+                            .as_str()
+                            .unwrap()
+                            .to_owned();
+                        let args = MoveArgs { before, after };
+                        Some(Transformation::Move { args })
+                    } else {
+                        panic!("transformations.fn should be one of reserved functions")
+                    }
+                })
+                .expect("transformation should contain fn property");
+
+            parsed_transformations.push(parsed_transformation.to_owned());
+        }
+
+        Some(parsed_transformations)
+    } else {
+        None
     }
 }
 
@@ -99,15 +174,21 @@ fn parse_glob_expression(val: &str) -> WorkDirExpression {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_config, GlobExpression, ParsedConfig, WorkDirExpression};
+    use serde_json::json;
+
+    use super::{
+        parse_config, GlobExpression, MoveArgs, ParsedConfig, Transformation, WorkDirExpression,
+    };
+    use crate::cli::reader::read_config;
     use crate::fixtures::workdir_path::create_glob_single;
     use crate::{
         cli::{
-            common::{DestinationRepository, MoveArgs, SourceRepository, Transformation},
+            common::{DestinationRepository, SourceRepository},
             reader::Config,
         },
         fixtures::workdir_path::create_glob_single_with_exclude,
     };
+    use indoc::indoc;
 
     #[test]
     fn success_workdir_glob() {
@@ -122,13 +203,15 @@ mod tests {
             name: "test2".to_string(),
         };
 
-        let expected_transformation_args = MoveArgs {
-            before: "".to_string(),
-            after: "my_folder".to_string(),
-        };
-        let expected_transformation = Transformation::Move {
-            args: expected_transformation_args,
-        };
+        let transformation_args = json!({
+            "before": "",
+            "after": "my_folder",
+        });
+        let transformation = json!({
+            "fn": "builtin.move",
+            "args": transformation_args,
+        });
+
         let config = Config {
             version: "0.0.1".to_string(),
             source: expected_source.clone(),
@@ -136,11 +219,18 @@ mod tests {
             token: "random_token".to_string(),
             origin_files: Some("glob(\"**\")".to_string()),
             destination_files: Some("glob(\"my_folder/**\")".to_string()),
-            transformations: Some(vec![expected_transformation.clone()]),
+            transformations: Some(vec![transformation]),
         };
 
         let parsed_config = parse_config(config.clone());
 
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
         let expected_config = ParsedConfig {
             version: "0.0.1".to_string(),
             source: expected_source,
@@ -167,13 +257,14 @@ mod tests {
             name: "test2".to_string(),
         };
 
-        let expected_transformation_args = MoveArgs {
-            before: "".to_string(),
-            after: "my_folder".to_string(),
-        };
-        let expected_transformation = Transformation::Move {
-            args: expected_transformation_args,
-        };
+        let transformation_args = json!({
+            "before": "".to_string(),
+            "after": "my_folder".to_string(),
+        });
+        let transformation = json!({
+            "fn": "builtin.move",
+            "args": transformation_args,
+        });
         let config = Config {
             version: "0.0.1".to_string(),
             source: expected_source.clone(),
@@ -181,11 +272,18 @@ mod tests {
             token: "random_token".to_string(),
             origin_files: Some("glob(\"**\", \"readme\")".to_string()),
             destination_files: Some("glob(\"my_folder/**\", \"my_folder/dist/**\")".to_string()),
-            transformations: Some(vec![expected_transformation.clone()]),
+            transformations: Some(vec![transformation]),
         };
 
         let parsed_config = parse_config(config.clone());
 
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
         let expected_config = ParsedConfig {
             version: "0.0.1".to_string(),
             source: expected_source,
@@ -212,13 +310,15 @@ mod tests {
             name: "test2".to_string(),
         };
 
-        let expected_transformation_args = MoveArgs {
-            before: "".to_string(),
-            after: "my_folder".to_string(),
-        };
-        let expected_transformation = Transformation::Move {
-            args: expected_transformation_args,
-        };
+        let transformation_args = json!({
+            "before": "",
+            "after": "my_folder",
+        });
+        let transformation = json!({
+            "fn": "builtin.move",
+            "args": transformation_args,
+        });
+
         let config = Config {
             version: "0.0.1".to_string(),
             source: expected_source.clone(),
@@ -226,10 +326,18 @@ mod tests {
             token: "random_token".to_string(),
             origin_files: None,
             destination_files: None,
-            transformations: Some(vec![expected_transformation.clone()]),
+            transformations: Some(vec![transformation]),
         };
 
         let parsed_config = parse_config(config.clone());
+
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
 
         let expected_config = ParsedConfig {
             version: "0.0.1".to_string(),
@@ -257,13 +365,14 @@ mod tests {
             name: "test2".to_string(),
         };
 
-        let expected_transformation_args = MoveArgs {
-            before: "".to_string(),
-            after: "my_folder".to_string(),
-        };
-        let expected_transformation = Transformation::Move {
-            args: expected_transformation_args,
-        };
+        let transformation_args = json!({
+            "before": "".to_string(),
+            "after": "my_folder".to_string(),
+        });
+        let transformation = json!({
+            "fn": "builtin.move",
+            "args": transformation_args,
+        });
         let config = Config {
             version: "0.0.1".to_string(),
             source: expected_source.clone(),
@@ -271,11 +380,18 @@ mod tests {
             token: "random_token".to_string(),
             origin_files: Some("path1".to_string()),
             destination_files: Some("path2".to_string()),
-            transformations: Some(vec![expected_transformation.clone()]),
+            transformations: Some(vec![transformation]),
         };
 
         let parsed_config = parse_config(config.clone());
 
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
         let expected_config = ParsedConfig {
             version: "0.0.1".to_string(),
             source: expected_source,
@@ -287,5 +403,96 @@ mod tests {
         };
 
         assert_eq!(parsed_config, expected_config)
+    }
+
+    #[test]
+    #[should_panic(expected = "builtin.move.args should contain after")]
+    fn test_transformations_move_after() {
+        let doc = indoc! {r#"
+            version: 0.0.1
+
+            source:
+              owner: my_name
+              name: test1
+              git_ref: main
+            
+            destinations:
+              - owner: my_name
+                name: test2
+            
+            token: random_token
+            
+            origin_files: glob("**")
+            
+            destination_files: glob("my_folder/**")
+            transformations:
+              -  fn: builtin.move
+                 args:
+                   before: random  
+            "#};
+
+        let config = read_config(&doc).unwrap();
+
+        parse_config(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "builtin.move.args should contain before")]
+    fn test_transformations_move_before() {
+        let doc = indoc! {r#"
+            version: 0.0.1
+
+            source:
+              owner: my_name
+              name: test1
+              git_ref: main
+            
+            destinations:
+              - owner: my_name
+                name: test2
+            
+            token: random_token
+            
+            origin_files: glob("**")
+            
+            destination_files: glob("my_folder/**")
+            transformations:
+                - fn: builtin.move
+                  args:
+                    after: random  
+            "#};
+
+        let config = read_config(&doc).unwrap();
+
+        parse_config(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "transformations.fn should be one of reserved functions")]
+    fn test_transformations_wrong_fn() {
+        let doc = indoc! {r#"
+        version: 0.0.1
+
+        source:
+          owner: my_name
+          name: test1
+          git_ref: main
+        
+        destinations:
+          - owner: my_name
+            name: test2
+        
+        token: random_token
+        
+        origin_files: glob("**")
+        
+        destination_files: glob("my_folder/**")
+        transformations:
+            - fn: random
+        "#};
+
+        let config = read_config(&doc).unwrap();
+
+        parse_config(config);
     }
 }
