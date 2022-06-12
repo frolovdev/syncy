@@ -248,5 +248,47 @@ mod tests {
     }
 
     #[test]
-    fn success_workdir_path() {}
+    fn success_workdir_path() {
+        let expected_source = SourceRepository {
+            owner: "my_name".to_string(),
+            name: "test1".to_string(),
+            git_ref: "main".to_string(),
+        };
+
+        let expected_destination = DestinationRepository {
+            owner: "my_name".to_string(),
+            name: "test2".to_string(),
+        };
+
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
+        let config = Config {
+            version: "0.0.1".to_string(),
+            source: expected_source.clone(),
+            destinations: vec![expected_destination.clone()],
+            token: "random_token".to_string(),
+            origin_files: Some("path1".to_string()),
+            destination_files: Some("path2".to_string()),
+            transformations: Some(vec![expected_transformation.clone()]),
+        };
+
+        let parsed_config = parse_config(config.clone());
+
+        let expected_config = ParsedConfig {
+            version: "0.0.1".to_string(),
+            source: expected_source,
+            destinations: vec![expected_destination],
+            token: "random_token".to_string(),
+            origin_files: Some(WorkDirExpression::Path("path1".to_string())),
+            destination_files: Some(WorkDirExpression::Path("path2".to_string())),
+            transformations: Some(vec![expected_transformation]),
+        };
+
+        assert_eq!(parsed_config, expected_config)
+    }
 }
