@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::cli::WorkDirExpression;
 use crate::cli::{DestinationRepository, ParsedConfig};
 use crate::git_tree;
 use crate::provider::Provider;
@@ -40,7 +41,10 @@ impl Provider<Arc<octocrab::Octocrab>> for GithubProvider {
     }
 
     async fn create_source_tree(&self, instance: Arc<octocrab::Octocrab>) -> git_tree::Tree {
-        let root_path = "".to_string();
+        let root_path = match &self.config.origin_files {
+            WorkDirExpression::Glob(_) => "",
+            WorkDirExpression::Path(val) => val,
+        };
 
         let source_repo_content = get_repo(
             &instance,
@@ -102,7 +106,11 @@ impl Provider<Arc<octocrab::Octocrab>> for GithubProvider {
         instance: Arc<Octocrab>,
         destination: &DestinationRepository,
     ) -> git_tree::Tree {
-        let root_path = "".to_string();
+        let root_path = match &self.config.destination_files {
+            WorkDirExpression::Glob(_) => "",
+            WorkDirExpression::Path(val) => val,
+        };
+
         let main_ref = "main";
 
         let repo_content = get_repo(
