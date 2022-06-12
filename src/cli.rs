@@ -118,8 +118,8 @@ pub struct EnhancedParsedConfig {
     pub source: SourceRepository,
     pub destinations: Vec<DestinationRepository>,
     pub token: String,
-    pub destination_files: Option<GlobExpression>,
-    pub origin_files: Option<GlobExpression>,
+    pub destination_files: Option<WorkDirExpression>,
+    pub origin_files: Option<WorkDirExpression>,
     pub transformations: Option<Vec<Transformation>>,
 }
 
@@ -150,6 +150,12 @@ fn parse_config(config: &str) -> Result<ParsedConfig, Box<dyn std::error::Error>
 }
 
 #[derive(Debug, Clone)]
+pub enum WorkDirExpression {
+    Glob(GlobExpression),
+    Path(String),
+}
+
+#[derive(Debug, Clone)]
 pub enum GlobExpression {
     Single(glob::Pattern),
     SingleWithExclude(glob::Pattern, glob::Pattern),
@@ -159,8 +165,8 @@ fn enhance_config(config: ParsedConfig) -> EnhancedParsedConfig {
     let origin_files = config.origin_files.as_ref().unwrap();
     let destination_files = config.destination_files.as_ref().unwrap();
 
-    let origin_files_glob = parse_glob(&origin_files);
-    let destination_files_glob = parse_glob(&destination_files);
+    let origin_files_glob = parse_work_dir_expression(&origin_files);
+    let destination_files_glob = parse_work_dir_expression(&destination_files);
 
     EnhancedParsedConfig {
         version: config.version,
@@ -173,7 +179,19 @@ fn enhance_config(config: ParsedConfig) -> EnhancedParsedConfig {
     }
 }
 
-fn parse_glob(val: &str) -> GlobExpression {
+fn parse_work_dir_expression(val: &str) -> WorkDirExpression {
+    if val.starts_with("glob(") {
+        parse_glob_expression(val)
+    } else {
+        parse_path_expression(val)
+    }
+}
+
+fn parse_path_expression(val: &str) -> WorkDirExpression {
+    WorkDirExpression::Path(val.to_string())
+}
+
+fn parse_glob_expression(val: &str) -> WorkDirExpression {
     let re_set = RegexSet::new(&["glob\\(\".*?\", \".*?\"\\)", "glob\\(\".*?\"\\)"]).unwrap();
     let result = re_set.matches(&val);
 
@@ -195,7 +213,10 @@ fn parse_glob(val: &str) -> GlobExpression {
         let second_glob_pattern =
             glob::Pattern::new(&val[start_second_glob..end_second_glob]).unwrap();
 
-        return GlobExpression::SingleWithExclude(glob_pattern, second_glob_pattern);
+        return WorkDirExpression::Glob(GlobExpression::SingleWithExclude(
+            glob_pattern,
+            second_glob_pattern,
+        ));
     }
 
     if matched_any && single {
@@ -203,7 +224,7 @@ fn parse_glob(val: &str) -> GlobExpression {
         let pattern = &val[6..end];
 
         let glob_pattern = glob::Pattern::new(pattern).unwrap();
-        return GlobExpression::Single(glob_pattern);
+        return WorkDirExpression::Glob(GlobExpression::Single(glob_pattern));
     }
 
     panic!("invalid glob string");

@@ -6,7 +6,10 @@ use syncy::git_tree;
 use glob;
 use serde_json::json;
 use syncy::{
-    cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression, SourceRepository},
+    cli::{
+        DestinationRepository, EnhancedParsedConfig, GlobExpression, SourceRepository,
+        WorkDirExpression,
+    },
     github_provider::GithubProvider,
     provider::Provider,
 };
@@ -118,12 +121,12 @@ mod create_source_tree {
                 name: "repo2".to_string(),
             }],
             token: "random_token".to_string(),
-            destination_files: Some(GlobExpression::Single(
+            destination_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
                 glob::Pattern::new("folder/**").unwrap(),
-            )),
-            origin_files: Some(GlobExpression::Single(
+            ))),
+            origin_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
                 glob::Pattern::new("folder/**").unwrap(),
-            )),
+            ))),
             transformations: Some(vec![Transformation::Move {
                 args: MoveArgs {
                     before: "".to_string(),

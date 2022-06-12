@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    cli::{GlobExpression, Transformation},
+    cli::{GlobExpression, Transformation, WorkDirExpression},
     event::Event,
 };
 
@@ -16,7 +16,8 @@ pub struct Node {
 pub type Tree = HashMap<String, Node>;
 
 pub trait GitTree {
-    fn transform_tree(self, origin_files_glob: &Option<GlobExpression>, root_path: &str) -> Tree;
+    fn transform_tree(self, origin_files_glob: &Option<WorkDirExpression>, root_path: &str)
+        -> Tree;
 
     fn generate_events(&self, destination_tree: &Tree) -> Vec<Event>;
 
@@ -24,8 +25,16 @@ pub trait GitTree {
 }
 
 impl GitTree for HashMap<String, Node> {
-    fn transform_tree(self, origin_files_glob: &Option<GlobExpression>, root_path: &str) -> Self {
+    fn transform_tree(
+        self,
+        origin_files_glob: &Option<WorkDirExpression>,
+        root_path: &str,
+    ) -> Self {
         if let None = origin_files_glob {
+            return self;
+        }
+
+        if let Some(WorkDirExpression::Path(_)) = origin_files_glob {
             return self;
         }
 
@@ -34,22 +43,29 @@ impl GitTree for HashMap<String, Node> {
         let mut new_tree = Tree::new();
         for (key, node) in self {
             match unwrapped_origin_glob {
-                GlobExpression::Single(pattern) => {
-                    if pattern.matches(&key) {
-                        let new_val =
-                            key.trim_start_matches(&format!("{root_path}/", root_path = root_path));
+                WorkDirExpression::Glob(glob_expression) => match glob_expression {
+                    GlobExpression::Single(pattern) => {
+                        if pattern.matches(&key) {
+                            let new_val = key.trim_start_matches(&format!(
+                                "{root_path}/",
+                                root_path = root_path
+                            ));
 
-                        new_tree.insert(new_val.to_string(), node);
+                            new_tree.insert(new_val.to_string(), node);
+                        }
                     }
-                }
-                GlobExpression::SingleWithExclude(include_pattern, exclude_pattern) => {
-                    if include_pattern.matches(&key) && !exclude_pattern.matches(&key) {
-                        let new_val =
-                            key.trim_start_matches(&format!("{root_path}/", root_path = root_path));
+                    GlobExpression::SingleWithExclude(include_pattern, exclude_pattern) => {
+                        if include_pattern.matches(&key) && !exclude_pattern.matches(&key) {
+                            let new_val = key.trim_start_matches(&format!(
+                                "{root_path}/",
+                                root_path = root_path
+                            ));
 
-                        new_tree.insert(new_val.to_string(), node);
+                            new_tree.insert(new_val.to_string(), node);
+                        }
                     }
-                }
+                },
+                _ => {}
             }
         }
 

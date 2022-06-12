@@ -12,7 +12,7 @@ use syncy::{
 };
 use wiremock::MockServer;
 
-use syncy::cli::{MoveArgs, Transformation};
+use syncy::cli::{MoveArgs, Transformation, WorkDirExpression};
 use syncy::git_tree::GitTree;
 
 #[tokio::test]
@@ -30,12 +30,12 @@ async fn generate_events_success() {
         },
         destinations: vec![destination_repository.clone()],
         token: "random_token".to_string(),
-        destination_files: Some(GlobExpression::Single(
+        destination_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
             glob::Pattern::new("repo_one_folder/**").unwrap(),
-        )),
-        origin_files: Some(GlobExpression::Single(
+        ))),
+        origin_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
             glob::Pattern::new("folder/**").unwrap(),
-        )),
+        ))),
         transformations: Some(vec![Transformation::Move {
             args: MoveArgs {
                 before: "".to_string(),
