@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Event {
     Create {
         path: String,
