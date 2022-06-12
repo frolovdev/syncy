@@ -5,7 +5,8 @@ https://retool.com/blog/gotchas-git-github-api/
 TODOS: 
 * ✅ Create pull request
 * ✅ Refactor a bit for better testing
-* Allow to get only one file or folder in origina destination files
+* ✅ Allow to get only one file or folder in origina destination files
+* ✅ Write some tests
 * Parallel execution (mutithreading)
-* Write some tests
 * Support one commit for the pull request (by introducing git tree)
+* add heuristic when glob starts with the folder, we can start download not from the root
