@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression};
+use crate::cli::{DestinationRepository, ParsedConfig};
 use crate::git_tree;
 use crate::provider::Provider;
 
 pub struct GithubProvider {
-    pub config: EnhancedParsedConfig,
+    pub config: ParsedConfig,
 }
 
 #[async_trait]

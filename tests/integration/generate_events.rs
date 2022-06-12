@@ -1,4 +1,3 @@
-use syncy::git_tree;
 use syncy::{event::Event, fixtures::content::get_content_json};
 
 use crate::mocks::github::get_content_mock;
@@ -6,13 +5,16 @@ use crate::mocks::github::get_content_mock;
 use glob;
 use serde_json::json;
 use syncy::{
-    cli::{DestinationRepository, EnhancedParsedConfig, GlobExpression, SourceRepository},
+    cli::{DestinationRepository, ParsedConfig, GlobExpression, SourceRepository},
     github_provider::GithubProvider,
     provider::Provider,
 };
 use wiremock::MockServer;
 
-use syncy::cli::{MoveArgs, Transformation, WorkDirExpression};
+use syncy::cli::{
+    common::{MoveArgs, Transformation},
+    parser::WorkDirExpression,
+};
 use syncy::git_tree::GitTree;
 
 #[tokio::test]
@@ -21,7 +23,7 @@ async fn generate_events_success() {
         owner: "owner".to_string(),
         name: "repo2".to_string(),
     };
-    let config = EnhancedParsedConfig {
+    let config = ParsedConfig {
         version: "0.1".to_string(),
         source: SourceRepository {
             owner: "owner".to_string(),

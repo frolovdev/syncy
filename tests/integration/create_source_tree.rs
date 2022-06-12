@@ -7,8 +7,7 @@ use glob;
 use serde_json::json;
 use syncy::{
     cli::{
-        DestinationRepository, EnhancedParsedConfig, GlobExpression, SourceRepository,
-        WorkDirExpression,
+        DestinationRepository, GlobExpression, ParsedConfig, SourceRepository, WorkDirExpression,
     },
     github_provider::GithubProvider,
     provider::Provider,
@@ -23,7 +22,7 @@ mod create_source_tree {
 
     #[tokio::test]
     async fn success() {
-        let config = EnhancedParsedConfig {
+        let config = ParsedConfig {
             version: "0.1".to_string(),
             source: SourceRepository {
                 owner: "owner".to_string(),
@@ -109,7 +108,7 @@ mod create_source_tree {
 
     #[tokio::test]
     async fn complex_case() {
-        let config = EnhancedParsedConfig {
+        let config = ParsedConfig {
             version: "0.1".to_string(),
             source: SourceRepository {
                 owner: "owner".to_string(),
