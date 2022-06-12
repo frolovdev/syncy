@@ -99,12 +99,15 @@ fn parse_glob_expression(val: &str) -> WorkDirExpression {
 
 #[cfg(test)]
 mod tests {
-    use crate::cli::{
-        common::{DestinationRepository, MoveArgs, SourceRepository, Transformation},
-        reader::Config,
+    use super::{parse_config, GlobExpression, ParsedConfig, WorkDirExpression};
+    use crate::fixtures::globs::create_glob_single;
+    use crate::{
+        cli::{
+            common::{DestinationRepository, MoveArgs, SourceRepository, Transformation},
+            reader::Config,
+        },
+        fixtures::globs::create_glob_single_with_exclude,
     };
-    use crate::fixtures::globs::{create_glob_single};
-    use super::{parse_config, ParsedConfig, WorkDirExpression, GlobExpression};
 
     #[test]
     fn success_workdir_glob() {
@@ -139,65 +142,110 @@ mod tests {
         let parsed_config = parse_config(config.clone());
 
         let expected_config = ParsedConfig {
-          version: "0.0.1".to_string(),
-          source: expected_source,
-          destinations: vec![expected_destination],
-          token: "random_token".to_string(),
-          origin_files: Some(create_glob_single("**")),
-          destination_files: Some(create_glob_single("my_folder/**")),
-          transformations: Some(vec![expected_transformation]),
-      };
+            version: "0.0.1".to_string(),
+            source: expected_source,
+            destinations: vec![expected_destination],
+            token: "random_token".to_string(),
+            origin_files: Some(create_glob_single("**")),
+            destination_files: Some(create_glob_single("my_folder/**")),
+            transformations: Some(vec![expected_transformation]),
+        };
 
         assert_eq!(parsed_config, expected_config)
     }
 
     #[test]
     fn success_workdir_glob_with_exclude() {
-      let expected_source = SourceRepository {
-        owner: "my_name".to_string(),
-        name: "test1".to_string(),
-        git_ref: "main".to_string(),
-    };
+        let expected_source = SourceRepository {
+            owner: "my_name".to_string(),
+            name: "test1".to_string(),
+            git_ref: "main".to_string(),
+        };
 
-    let expected_destination = DestinationRepository {
-        owner: "my_name".to_string(),
-        name: "test2".to_string(),
-    };
+        let expected_destination = DestinationRepository {
+            owner: "my_name".to_string(),
+            name: "test2".to_string(),
+        };
 
-    let expected_transformation_args = MoveArgs {
-        before: "".to_string(),
-        after: "my_folder".to_string(),
-    };
-    let expected_transformation = Transformation::Move {
-        args: expected_transformation_args,
-    };
-    let config = Config {
-        version: "0.0.1".to_string(),
-        source: expected_source.clone(),
-        destinations: vec![expected_destination.clone()],
-        token: "random_token".to_string(),
-        origin_files:  None,
-        destination_files:  None,
-        transformations: Some(vec![expected_transformation.clone()]),
-    };
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
+        let config = Config {
+            version: "0.0.1".to_string(),
+            source: expected_source.clone(),
+            destinations: vec![expected_destination.clone()],
+            token: "random_token".to_string(),
+            origin_files: Some("glob(\"**\", \"readme\")".to_string()),
+            destination_files: Some("glob(\"my_folder/**\", \"my_folder/dist/**\")".to_string()),
+            transformations: Some(vec![expected_transformation.clone()]),
+        };
 
-    let parsed_config = parse_config(config.clone());
+        let parsed_config = parse_config(config.clone());
 
-    let expected_config = ParsedConfig {
-      version: "0.0.1".to_string(),
-      source: expected_source,
-      destinations: vec![expected_destination],
-      token: "random_token".to_string(),
-      origin_files: Some(WorkDirExpression::Path("".to_string())),
-      destination_files: Some(WorkDirExpression::Path("".to_string())),
-      transformations: Some(vec![expected_transformation]),
-  };
+        let expected_config = ParsedConfig {
+            version: "0.0.1".to_string(),
+            source: expected_source,
+            destinations: vec![expected_destination],
+            token: "random_token".to_string(),
+            origin_files: Some(create_glob_single_with_exclude("**", "readme")),
+            destination_files: Some(create_glob_single_with_exclude(
+                "my_folder/**",
+                "my_folder/dist/**",
+            )),
+            transformations: Some(vec![expected_transformation]),
+        };
 
-    assert_eq!(parsed_config, expected_config)
+        assert_eq!(parsed_config, expected_config)
     }
 
     #[test]
-    fn success_workdir_when_none() {}
+    fn success_workdir_when_none() {
+        let expected_source = SourceRepository {
+            owner: "my_name".to_string(),
+            name: "test1".to_string(),
+            git_ref: "main".to_string(),
+        };
+
+        let expected_destination = DestinationRepository {
+            owner: "my_name".to_string(),
+            name: "test2".to_string(),
+        };
+
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
+        let config = Config {
+            version: "0.0.1".to_string(),
+            source: expected_source.clone(),
+            destinations: vec![expected_destination.clone()],
+            token: "random_token".to_string(),
+            origin_files: None,
+            destination_files: None,
+            transformations: Some(vec![expected_transformation.clone()]),
+        };
+
+        let parsed_config = parse_config(config.clone());
+
+        let expected_config = ParsedConfig {
+            version: "0.0.1".to_string(),
+            source: expected_source,
+            destinations: vec![expected_destination],
+            token: "random_token".to_string(),
+            origin_files: Some(WorkDirExpression::Path("".to_string())),
+            destination_files: Some(WorkDirExpression::Path("".to_string())),
+            transformations: Some(vec![expected_transformation]),
+        };
+
+        assert_eq!(parsed_config, expected_config)
+    }
 
     #[test]
     fn success_workdir_path() {}
