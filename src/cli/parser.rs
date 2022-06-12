@@ -29,8 +29,8 @@ pub enum GlobExpression {
 }
 
 pub fn parse_config(config: reader::Config) -> ParsedConfig {
-    let origin_files = config.origin_files.as_ref().unwrap();
-    let destination_files = config.destination_files.as_ref().unwrap();
+    let origin_files = config.origin_files.unwrap_or("".to_string());
+    let destination_files = config.destination_files.unwrap_or("".to_string());
 
     let origin_files_glob = parse_work_dir_expression(&origin_files);
     let destination_files_glob = parse_work_dir_expression(&destination_files);
@@ -152,7 +152,49 @@ mod tests {
     }
 
     #[test]
-    fn success_workdir_glob_with_exclude() {}
+    fn success_workdir_glob_with_exclude() {
+      let expected_source = SourceRepository {
+        owner: "my_name".to_string(),
+        name: "test1".to_string(),
+        git_ref: "main".to_string(),
+    };
+
+    let expected_destination = DestinationRepository {
+        owner: "my_name".to_string(),
+        name: "test2".to_string(),
+    };
+
+    let expected_transformation_args = MoveArgs {
+        before: "".to_string(),
+        after: "my_folder".to_string(),
+    };
+    let expected_transformation = Transformation::Move {
+        args: expected_transformation_args,
+    };
+    let config = Config {
+        version: "0.0.1".to_string(),
+        source: expected_source.clone(),
+        destinations: vec![expected_destination.clone()],
+        token: "random_token".to_string(),
+        origin_files:  None,
+        destination_files:  None,
+        transformations: Some(vec![expected_transformation.clone()]),
+    };
+
+    let parsed_config = parse_config(config.clone());
+
+    let expected_config = ParsedConfig {
+      version: "0.0.1".to_string(),
+      source: expected_source,
+      destinations: vec![expected_destination],
+      token: "random_token".to_string(),
+      origin_files: Some(WorkDirExpression::Path("".to_string())),
+      destination_files: Some(WorkDirExpression::Path("".to_string())),
+      transformations: Some(vec![expected_transformation]),
+  };
+
+    assert_eq!(parsed_config, expected_config)
+    }
 
     #[test]
     fn success_workdir_when_none() {}
