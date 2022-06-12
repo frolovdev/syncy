@@ -97,7 +97,7 @@ pub fn read_config(config: &str) -> Result<Config, Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
 
-    mod deserialize_transformations {
+    mod reader {
 
         use crate::cli::common::{MoveArgs, Transformation};
 
