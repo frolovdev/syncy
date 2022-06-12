@@ -5,7 +5,7 @@ use super::{
     reader,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParsedConfig {
     pub version: String,
     pub source: SourceRepository,
@@ -16,13 +16,13 @@ pub struct ParsedConfig {
     pub transformations: Option<Vec<Transformation>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WorkDirExpression {
     Glob(GlobExpression),
     Path(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GlobExpression {
     Single(glob::Pattern),
     SingleWithExclude(glob::Pattern, glob::Pattern),
@@ -95,4 +95,68 @@ fn parse_glob_expression(val: &str) -> WorkDirExpression {
     }
 
     panic!("invalid glob string");
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::cli::{
+        common::{DestinationRepository, MoveArgs, SourceRepository, Transformation},
+        reader::Config,
+    };
+    use crate::fixtures::globs::{create_glob_single};
+    use super::{parse_config, ParsedConfig, WorkDirExpression, GlobExpression};
+
+    #[test]
+    fn success_workdir_glob() {
+        let expected_source = SourceRepository {
+            owner: "my_name".to_string(),
+            name: "test1".to_string(),
+            git_ref: "main".to_string(),
+        };
+
+        let expected_destination = DestinationRepository {
+            owner: "my_name".to_string(),
+            name: "test2".to_string(),
+        };
+
+        let expected_transformation_args = MoveArgs {
+            before: "".to_string(),
+            after: "my_folder".to_string(),
+        };
+        let expected_transformation = Transformation::Move {
+            args: expected_transformation_args,
+        };
+        let config = Config {
+            version: "0.0.1".to_string(),
+            source: expected_source.clone(),
+            destinations: vec![expected_destination.clone()],
+            token: "random_token".to_string(),
+            origin_files: Some("glob(\"**\")".to_string()),
+            destination_files: Some("glob(\"my_folder/**\")".to_string()),
+            transformations: Some(vec![expected_transformation.clone()]),
+        };
+
+        let parsed_config = parse_config(config.clone());
+
+        let expected_config = ParsedConfig {
+          version: "0.0.1".to_string(),
+          source: expected_source,
+          destinations: vec![expected_destination],
+          token: "random_token".to_string(),
+          origin_files: Some(create_glob_single("**")),
+          destination_files: Some(create_glob_single("my_folder/**")),
+          transformations: Some(vec![expected_transformation]),
+      };
+
+        assert_eq!(parsed_config, expected_config)
+    }
+
+    #[test]
+    fn success_workdir_glob_with_exclude() {}
+
+    #[test]
+    fn success_workdir_when_none() {}
+
+    #[test]
+    fn success_workdir_path() {}
 }

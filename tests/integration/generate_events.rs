@@ -5,7 +5,7 @@ use crate::mocks::github::get_content_mock;
 use glob;
 use serde_json::json;
 use syncy::{
-    cli::{DestinationRepository, ParsedConfig, GlobExpression, SourceRepository},
+    cli::{DestinationRepository, GlobExpression, ParsedConfig, SourceRepository},
     github_provider::GithubProvider,
     provider::Provider,
 };
