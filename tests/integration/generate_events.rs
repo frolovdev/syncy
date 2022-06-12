@@ -1,4 +1,7 @@
-use syncy::{event::Event, fixtures::content::get_content_json};
+use syncy::{
+    event::Event,
+    fixtures::{content::get_content_json, workdir_path::create_glob_single},
+};
 
 use crate::mocks::github::get_content_mock;
 
@@ -32,12 +35,8 @@ async fn generate_events_success() {
         },
         destinations: vec![destination_repository.clone()],
         token: "random_token".to_string(),
-        destination_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
-            glob::Pattern::new("repo_one_folder/**").unwrap(),
-        ))),
-        origin_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
-            glob::Pattern::new("folder/**").unwrap(),
-        ))),
+        destination_files: create_glob_single("repo_one_folder/**"),
+        origin_files: create_glob_single("folder/**"),
         transformations: Some(vec![Transformation::Move {
             args: MoveArgs {
                 before: "".to_string(),

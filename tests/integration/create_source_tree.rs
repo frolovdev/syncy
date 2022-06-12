@@ -18,6 +18,8 @@ use syncy::cli::{MoveArgs, Transformation};
 
 mod create_source_tree {
 
+    use syncy::fixtures::workdir_path::{create_glob_single, create_workdir_path};
+
     use super::*;
 
     #[tokio::test]
@@ -34,8 +36,8 @@ mod create_source_tree {
                 name: "repo2".to_string(),
             }],
             token: "random_token".to_string(),
-            destination_files: None,
-            origin_files: None,
+            destination_files: create_workdir_path(""),
+            origin_files: create_workdir_path(""),
             transformations: None,
         };
 
@@ -120,12 +122,8 @@ mod create_source_tree {
                 name: "repo2".to_string(),
             }],
             token: "random_token".to_string(),
-            destination_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
-                glob::Pattern::new("folder/**").unwrap(),
-            ))),
-            origin_files: Some(WorkDirExpression::Glob(GlobExpression::Single(
-                glob::Pattern::new("folder/**").unwrap(),
-            ))),
+            destination_files: create_glob_single("folder/**"),
+            origin_files: create_glob_single("folder/**"),
             transformations: Some(vec![Transformation::Move {
                 args: MoveArgs {
                     before: "".to_string(),

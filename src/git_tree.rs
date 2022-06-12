@@ -16,8 +16,7 @@ pub struct Node {
 pub type Tree = HashMap<String, Node>;
 
 pub trait GitTree {
-    fn transform_tree(self, origin_files_glob: &Option<WorkDirExpression>, root_path: &str)
-        -> Tree;
+    fn transform_tree(self, origin_files_glob: &WorkDirExpression, root_path: &str) -> Tree;
 
     fn generate_events(&self, destination_tree: &Tree) -> Vec<Event>;
 
@@ -25,24 +24,14 @@ pub trait GitTree {
 }
 
 impl GitTree for HashMap<String, Node> {
-    fn transform_tree(
-        self,
-        origin_files_glob: &Option<WorkDirExpression>,
-        root_path: &str,
-    ) -> Self {
-        if let None = origin_files_glob {
+    fn transform_tree(self, origin_files_glob: &WorkDirExpression, root_path: &str) -> Self {
+        if let WorkDirExpression::Path(_) = origin_files_glob {
             return self;
         }
-
-        if let Some(WorkDirExpression::Path(_)) = origin_files_glob {
-            return self;
-        }
-
-        let unwrapped_origin_glob = origin_files_glob.as_ref().unwrap();
 
         let mut new_tree = Tree::new();
         for (key, node) in self {
-            match unwrapped_origin_glob {
+            match origin_files_glob {
                 WorkDirExpression::Glob(glob_expression) => match glob_expression {
                     GlobExpression::Single(pattern) => {
                         if pattern.matches(&key) {
@@ -139,7 +128,7 @@ impl GitTree for HashMap<String, Node> {
 mod tests {
 
     use super::{GitTree, Node, Tree};
-    use crate::fixtures::{content::get_content_json, globs::create_glob_single};
+    use crate::fixtures::{content::get_content_json, workdir_path::create_glob_single};
 
     #[test]
     fn test_success() {
@@ -175,7 +164,7 @@ mod tests {
 
         let glob = create_glob_single("folder/folder2/**");
 
-        let new_tree = tree.transform_tree(&Some(glob), "");
+        let new_tree = tree.transform_tree(&glob, "");
 
         let mut expected_tree = Tree::new();
         expected_tree.insert(

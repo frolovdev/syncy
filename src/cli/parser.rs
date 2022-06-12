@@ -11,8 +11,8 @@ pub struct ParsedConfig {
     pub source: SourceRepository,
     pub destinations: Vec<DestinationRepository>,
     pub token: String,
-    pub destination_files: Option<WorkDirExpression>,
-    pub origin_files: Option<WorkDirExpression>,
+    pub destination_files: WorkDirExpression,
+    pub origin_files: WorkDirExpression,
     pub transformations: Option<Vec<Transformation>>,
 }
 
@@ -40,8 +40,8 @@ pub fn parse_config(config: reader::Config) -> ParsedConfig {
         source: config.source,
         destinations: config.destinations,
         token: config.token,
-        destination_files: Some(destination_files_glob),
-        origin_files: Some(origin_files_glob),
+        destination_files: destination_files_glob,
+        origin_files: origin_files_glob,
         transformations: config.transformations,
     }
 }
@@ -100,13 +100,13 @@ fn parse_glob_expression(val: &str) -> WorkDirExpression {
 #[cfg(test)]
 mod tests {
     use super::{parse_config, GlobExpression, ParsedConfig, WorkDirExpression};
-    use crate::fixtures::globs::create_glob_single;
+    use crate::fixtures::workdir_path::create_glob_single;
     use crate::{
         cli::{
             common::{DestinationRepository, MoveArgs, SourceRepository, Transformation},
             reader::Config,
         },
-        fixtures::globs::create_glob_single_with_exclude,
+        fixtures::workdir_path::create_glob_single_with_exclude,
     };
 
     #[test]
@@ -146,8 +146,8 @@ mod tests {
             source: expected_source,
             destinations: vec![expected_destination],
             token: "random_token".to_string(),
-            origin_files: Some(create_glob_single("**")),
-            destination_files: Some(create_glob_single("my_folder/**")),
+            origin_files: create_glob_single("**"),
+            destination_files: create_glob_single("my_folder/**"),
             transformations: Some(vec![expected_transformation]),
         };
 
@@ -191,11 +191,8 @@ mod tests {
             source: expected_source,
             destinations: vec![expected_destination],
             token: "random_token".to_string(),
-            origin_files: Some(create_glob_single_with_exclude("**", "readme")),
-            destination_files: Some(create_glob_single_with_exclude(
-                "my_folder/**",
-                "my_folder/dist/**",
-            )),
+            origin_files: create_glob_single_with_exclude("**", "readme"),
+            destination_files: create_glob_single_with_exclude("my_folder/**", "my_folder/dist/**"),
             transformations: Some(vec![expected_transformation]),
         };
 
@@ -239,8 +236,8 @@ mod tests {
             source: expected_source,
             destinations: vec![expected_destination],
             token: "random_token".to_string(),
-            origin_files: Some(WorkDirExpression::Path("".to_string())),
-            destination_files: Some(WorkDirExpression::Path("".to_string())),
+            origin_files: WorkDirExpression::Path("".to_string()),
+            destination_files: WorkDirExpression::Path("".to_string()),
             transformations: Some(vec![expected_transformation]),
         };
 
@@ -284,8 +281,8 @@ mod tests {
             source: expected_source,
             destinations: vec![expected_destination],
             token: "random_token".to_string(),
-            origin_files: Some(WorkDirExpression::Path("path1".to_string())),
-            destination_files: Some(WorkDirExpression::Path("path2".to_string())),
+            origin_files: WorkDirExpression::Path("path1".to_string()),
+            destination_files: WorkDirExpression::Path("path2".to_string()),
             transformations: Some(vec![expected_transformation]),
         };
 

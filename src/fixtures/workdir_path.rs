@@ -15,3 +15,7 @@ pub fn create_glob_single_with_exclude(val: &str, exclude: &str) -> WorkDirExpre
         glob_pattern_exclude,
     ))
 }
+
+pub fn create_workdir_path(val: &str) -> WorkDirExpression {
+    WorkDirExpression::Path(val.to_string())
+}
