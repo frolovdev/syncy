@@ -3,13 +3,12 @@ use git_tree::GitTree;
 use github_provider::GithubProvider;
 use provider::Provider;
 
-mod cli;
-mod event;
-mod fixtures;
-mod git_tree;
-mod github_provider;
-mod mocks;
-mod provider;
+pub mod cli;
+pub mod event;
+pub mod fixtures;
+pub mod git_tree;
+pub mod github_provider;
+pub mod provider;
 
 #[tokio::main]
 async fn main() {
