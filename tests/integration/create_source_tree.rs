@@ -198,7 +198,7 @@ mod create_source_tree {
             (
                 "repo_one_folder/folder/test2".to_string(),
                 git_tree::Node {
-                    path: source_content_file.path.to_string(),
+                    path: "repo_one_folder/folder/test2".to_string(),
                     content: source_content_file.decoded_content(),
                     git_url: source_content_file.git_url,
                     sha: source_content_file.sha,
@@ -207,7 +207,7 @@ mod create_source_tree {
             (
                 "repo_one_folder/folder/test3".to_string(),
                 git_tree::Node {
-                    path: source_content_file_second.path.to_string(),
+                    path: "repo_one_folder/folder/test3".to_string(),
                     content: source_content_file_second.decoded_content(),
                     git_url: source_content_file_second.git_url,
                     sha: source_content_file_second.sha,

@@ -16,12 +16,12 @@ pub struct MoveArgs {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReplaceArgs {
-    before: CustomRegex,
-    after: String,
+    pub before: CustomRegex,
+    pub after: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct CustomRegex(Regex);
+pub struct CustomRegex(pub Regex);
 
 impl PartialEq for CustomRegex {
     fn eq(&self, other: &Self) -> bool {
@@ -200,8 +200,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        parse_config, GlobExpression, MoveArgs, ParsedConfig, Transformation, WorkDirExpression,
-        ReplaceArgs
+        parse_config, GlobExpression, MoveArgs, ParsedConfig, ReplaceArgs, Transformation,
+        WorkDirExpression,
     };
     use crate::cli::reader::read_config;
     use crate::fixtures::workdir_path::create_glob_single;
@@ -533,12 +533,12 @@ mod tests {
                 name: "test1".to_string(),
                 git_ref: "main".to_string(),
             };
-    
+
             let expected_destination = DestinationRepository {
                 owner: "my_name".to_string(),
                 name: "test2".to_string(),
             };
-    
+
             let transformation_args = json!({
                 "before": "kek".to_string(),
                 "after": "lol".to_string(),
@@ -556,9 +556,9 @@ mod tests {
                 destination_files: Some("path2".to_string()),
                 transformations: Some(vec![transformation]),
             };
-    
+
             let parsed_config = parse_config(config.clone());
-    
+
             let expected_transformation_args = ReplaceArgs {
                 before: CustomRegex(Regex::new("kek").unwrap()),
                 after: "lol".to_string(),
@@ -575,7 +575,7 @@ mod tests {
                 destination_files: WorkDirExpression::Path("path2".to_string()),
                 transformations: Some(vec![expected_transformation]),
             };
-    
+
             assert_eq!(parsed_config, expected_config)
         }
     }

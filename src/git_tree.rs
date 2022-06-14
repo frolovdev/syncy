@@ -68,11 +68,11 @@ impl GitTree for HashMap<String, Node> {
             match destination_node {
                 Some(destination_node) => events.push(Event::Update {
                     sha: destination_node.sha.to_string(),
-                    path: source_key.to_string(),
+                    path: source_node.path.to_string(),
                     content: source_node.content.clone(),
                 }),
                 None => events.push(Event::Create {
-                    path: source_key.to_string(),
+                    path: source_node.path.to_string(),
                     content: source_node.content.clone(),
                 }),
             }
@@ -81,7 +81,7 @@ impl GitTree for HashMap<String, Node> {
         for (dest_key, dest_node) in destination_tree.iter() {
             if !self.contains_key(dest_key) {
                 events.push(Event::Delete {
-                    path: dest_key.to_string(),
+                    path: dest_node.path.to_string(),
                     sha: dest_node.sha.to_string(),
                 })
             }
@@ -98,6 +98,7 @@ impl GitTree for HashMap<String, Node> {
 
         for (path, node) in self {
             let mut new_path = "".to_string();
+            let mut new_content = "".to_string();
             for t in transformations.as_ref().unwrap().iter() {
                 match t {
                     Transformation::Move { args } => {
@@ -114,11 +115,29 @@ impl GitTree for HashMap<String, Node> {
                             );
                         }
                     }
-                    Transformation::Replace { args } => todo!(),
+                    Transformation::Replace { args } => {
+                        let regex = &args.before.0;
+                        if let Some(content_value) = &node.content {
+                            let new_string = regex.replace_all(content_value, &args.after);
+
+                            new_content = new_string.to_string();
+                        }
+                    }
                 };
             }
 
-            new_tree.insert(new_path, node);
+            let result_content = if new_content.is_empty() {
+                node.content
+            } else {
+                Some(new_content)
+            };
+            let new_node = Node {
+                path: new_path.clone(),
+                content: result_content,
+                sha: node.sha,
+                git_url: node.git_url,
+            };
+            new_tree.insert(new_path, new_node);
         }
 
         new_tree
