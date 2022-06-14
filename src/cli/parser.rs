@@ -17,6 +17,7 @@ pub struct MoveArgs {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReplaceArgs {
     before: CustomRegex,
+    after: String,
 }
 
 #[derive(Debug, Clone)]
@@ -106,6 +107,28 @@ fn parse_transformations(
                             .to_owned();
                         let args = MoveArgs { before, after };
                         Some(Transformation::Move { args })
+                    } else if v == "builtin.replace" {
+                        let before = t
+                            .get("args")
+                            .and_then(|v| v.get("before"))
+                            .expect("builtin.replace.args should contain before")
+                            .as_str()
+                            .unwrap()
+                            .to_owned();
+
+                        let after = t
+                            .get("args")
+                            .and_then(|v| v.get("after"))
+                            .expect("builtin.replace.args should contain after")
+                            .as_str()
+                            .unwrap()
+                            .to_owned();
+
+                        let args = ReplaceArgs {
+                            before: CustomRegex(Regex::new(&before).unwrap()),
+                            after,
+                        };
+                        Some(Transformation::Replace { args })
                     } else {
                         panic!("transformations.fn should be one of reserved functions")
                     }
@@ -178,6 +201,7 @@ mod tests {
 
     use super::{
         parse_config, GlobExpression, MoveArgs, ParsedConfig, Transformation, WorkDirExpression,
+        ReplaceArgs
     };
     use crate::cli::reader::read_config;
     use crate::fixtures::workdir_path::create_glob_single;
@@ -494,5 +518,65 @@ mod tests {
         let config = read_config(&doc).unwrap();
 
         parse_config(config);
+    }
+
+    mod transformations_replace {
+        use regex::Regex;
+
+        use crate::cli::parser::CustomRegex;
+
+        use super::*;
+        #[test]
+        fn success() {
+            let expected_source = SourceRepository {
+                owner: "my_name".to_string(),
+                name: "test1".to_string(),
+                git_ref: "main".to_string(),
+            };
+    
+            let expected_destination = DestinationRepository {
+                owner: "my_name".to_string(),
+                name: "test2".to_string(),
+            };
+    
+            let transformation_args = json!({
+                "before": "kek".to_string(),
+                "after": "lol".to_string(),
+            });
+            let transformation = json!({
+                "fn": "builtin.replace",
+                "args": transformation_args,
+            });
+            let config = Config {
+                version: "0.0.1".to_string(),
+                source: expected_source.clone(),
+                destinations: vec![expected_destination.clone()],
+                token: "random_token".to_string(),
+                origin_files: Some("path1".to_string()),
+                destination_files: Some("path2".to_string()),
+                transformations: Some(vec![transformation]),
+            };
+    
+            let parsed_config = parse_config(config.clone());
+    
+            let expected_transformation_args = ReplaceArgs {
+                before: CustomRegex(Regex::new("kek").unwrap()),
+                after: "lol".to_string(),
+            };
+            let expected_transformation = Transformation::Replace {
+                args: expected_transformation_args,
+            };
+            let expected_config = ParsedConfig {
+                version: "0.0.1".to_string(),
+                source: expected_source,
+                destinations: vec![expected_destination],
+                token: "random_token".to_string(),
+                origin_files: WorkDirExpression::Path("path1".to_string()),
+                destination_files: WorkDirExpression::Path("path2".to_string()),
+                transformations: Some(vec![expected_transformation]),
+            };
+    
+            assert_eq!(parsed_config, expected_config)
+        }
     }
 }
