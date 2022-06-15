@@ -20,6 +20,16 @@ pub struct ReplaceArgs {
     pub after: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct UpdateByPatternArgs {
+    pub pattern: CustomRegex,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum UpdateFn {
+    UpdateByPattern { args: UpdateByPatternArgs },
+}
+
 #[derive(Debug, Clone)]
 pub struct CustomRegex(pub Regex);
 
@@ -48,6 +58,7 @@ pub struct ParsedConfig {
     pub destination_files: WorkDirExpression,
     pub origin_files: WorkDirExpression,
     pub transformations: Option<Vec<Transformation>>,
+    pub update_fns: Option<Vec<UpdateFn>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,6 +88,7 @@ pub fn parse_config(config: reader::Config) -> ParsedConfig {
         destination_files: destination_files_glob,
         origin_files: origin_files_glob,
         transformations: parse_transformations(&config.transformations),
+        update_fns: parse_update_fns(&config.update_fns),
     }
 }
 
@@ -139,6 +151,39 @@ fn parse_transformations(
         }
 
         Some(parsed_transformations)
+    } else {
+        None
+    }
+}
+
+fn parse_update_fns(update_fns: &Option<Vec<serde_json::Value>>) -> Option<Vec<UpdateFn>> {
+    if let Some(unwrapped_update_fns) = update_fns {
+        let mut parsed_fns = Vec::new();
+        for r#fn in unwrapped_update_fns.iter() {
+            let parsed_fn = &r#fn
+                .get("fn")
+                .and_then(|v| {
+                    if v == "builtin.update_by_pattern" {
+                        let pattern = r#fn
+                            .get("args")
+                            .and_then(|v| v.get("pattern"))
+                            .expect("builtin.update_by_pattern.args should contain pattern")
+                            .as_str()
+                            .unwrap()
+                            .to_owned();
+
+                        let args = UpdateByPatternArgs { pattern: CustomRegex(Regex::new(&pattern).unwrap())  };
+                        Some(UpdateFn::UpdateByPattern { args })
+                    } else {
+                        panic!("update_fns.fn should be one of reserved functions")
+                    }
+                })
+                .expect("transformation should contain fn property");
+
+            parsed_fns.push(parsed_fn.to_owned());
+        }
+
+        Some(parsed_fns)
     } else {
         None
     }
@@ -244,6 +289,7 @@ mod tests {
             origin_files: Some("glob(\"**\")".to_string()),
             destination_files: Some("glob(\"my_folder/**\")".to_string()),
             transformations: Some(vec![transformation]),
+            update_fns: None
         };
 
         let parsed_config = parse_config(config.clone());
@@ -263,6 +309,7 @@ mod tests {
             origin_files: create_glob_single("**"),
             destination_files: create_glob_single("my_folder/**"),
             transformations: Some(vec![expected_transformation]),
+            update_fns: None
         };
 
         assert_eq!(parsed_config, expected_config)
@@ -297,6 +344,7 @@ mod tests {
             origin_files: Some("glob(\"**\", \"readme\")".to_string()),
             destination_files: Some("glob(\"my_folder/**\", \"my_folder/dist/**\")".to_string()),
             transformations: Some(vec![transformation]),
+            update_fns: None
         };
 
         let parsed_config = parse_config(config.clone());
@@ -316,6 +364,7 @@ mod tests {
             origin_files: create_glob_single_with_exclude("**", "readme"),
             destination_files: create_glob_single_with_exclude("my_folder/**", "my_folder/dist/**"),
             transformations: Some(vec![expected_transformation]),
+            update_fns: None
         };
 
         assert_eq!(parsed_config, expected_config)
@@ -351,6 +400,7 @@ mod tests {
             origin_files: None,
             destination_files: None,
             transformations: Some(vec![transformation]),
+            update_fns: None
         };
 
         let parsed_config = parse_config(config.clone());
@@ -371,6 +421,7 @@ mod tests {
             origin_files: WorkDirExpression::Path("".to_string()),
             destination_files: WorkDirExpression::Path("".to_string()),
             transformations: Some(vec![expected_transformation]),
+            update_fns: None
         };
 
         assert_eq!(parsed_config, expected_config)
@@ -405,6 +456,7 @@ mod tests {
             origin_files: Some("path1".to_string()),
             destination_files: Some("path2".to_string()),
             transformations: Some(vec![transformation]),
+            update_fns: None
         };
 
         let parsed_config = parse_config(config.clone());
@@ -424,6 +476,7 @@ mod tests {
             origin_files: WorkDirExpression::Path("path1".to_string()),
             destination_files: WorkDirExpression::Path("path2".to_string()),
             transformations: Some(vec![expected_transformation]),
+            update_fns: None
         };
 
         assert_eq!(parsed_config, expected_config)
@@ -555,6 +608,7 @@ mod tests {
                 origin_files: Some("path1".to_string()),
                 destination_files: Some("path2".to_string()),
                 transformations: Some(vec![transformation]),
+                update_fns: None
             };
 
             let parsed_config = parse_config(config.clone());
@@ -574,6 +628,7 @@ mod tests {
                 origin_files: WorkDirExpression::Path("path1".to_string()),
                 destination_files: WorkDirExpression::Path("path2".to_string()),
                 transformations: Some(vec![expected_transformation]),
+                update_fns: None
             };
 
             assert_eq!(parsed_config, expected_config)

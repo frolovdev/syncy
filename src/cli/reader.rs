@@ -13,6 +13,7 @@ pub struct Config {
     pub destination_files: Option<String>,
     pub origin_files: Option<String>,
     pub transformations: Option<Vec<serde_json::Value>>,
+    pub update_fns: Option<Vec<serde_json::Value>>,
 }
 
 pub fn read_config(config: &str) -> Result<Config, Box<dyn std::error::Error>> {
@@ -93,6 +94,7 @@ mod tests {
                 origin_files: Some("glob(\"**\")".to_string()),
                 destination_files: Some("glob(\"my_folder/**\")".to_string()),
                 transformations: Some(vec![expected_transformation]),
+                update_fns: None,
             };
 
             assert_eq!(parsed_config, expected_config);
@@ -147,6 +149,7 @@ mod tests {
                 origin_files: Some("glob(\"**\")".to_string()),
                 destination_files: Some("glob(\"my_folder/**\")".to_string()),
                 transformations: None,
+                update_fns: None,
             };
 
             assert_eq!(parsed_config, expected_config);
@@ -208,6 +211,7 @@ mod tests {
                 origin_files: Some("path".to_string()),
                 destination_files: Some("another_path".to_string()),
                 transformations: Some(vec![expected_transformation]),
+                update_fns: None,
             };
 
             assert_eq!(parsed_config, expected_config);

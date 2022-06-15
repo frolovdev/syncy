@@ -35,6 +35,7 @@ mod create_source_tree {
             destination_files: create_workdir_path(""),
             origin_files: create_workdir_path(""),
             transformations: None,
+            update_fns: None
         };
 
         let mock_server = MockServer::start().await;
@@ -126,6 +127,7 @@ mod create_source_tree {
                     after: "repo_one_folder".to_string(),
                 },
             }]),
+            update_fns: None
         };
 
         let mock_server = MockServer::start().await;

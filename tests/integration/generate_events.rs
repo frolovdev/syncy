@@ -40,6 +40,7 @@ async fn generate_events_success() {
                 after: "repo_one_folder".to_string(),
             },
         }]),
+        update_fns: None
     };
 
     let mock_server = MockServer::start().await;
@@ -244,6 +245,7 @@ async fn generate_events_success_with_config_path() {
                 after: "repo_one_folder".to_string(),
             },
         }]),
+        update_fns: None
     };
 
     let mock_server = MockServer::start().await;
